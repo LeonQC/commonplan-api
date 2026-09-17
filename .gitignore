@@ -1,7 +1,5 @@
-.env
-backend/.env
-auth_service/.env
-frontend/.env
+.env*
+!.env.example
 __pycache__/
 .pytest_cache/
 .venv/
