@@ -1,0 +1,155 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-zhitong}
+      POSTGRES_USER: ${POSTGRES_USER:-zhitong}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-zhitong}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-zhitong} -d ${POSTGRES_DB:-zhitong}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  db-init:
+    image: postgres:16-alpine
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-zhitong}
+      POSTGRES_USER: ${POSTGRES_USER:-zhitong}
+      AUTH_POSTGRES_DB: ${AUTH_POSTGRES_DB:-zhitong_auth}
+    volumes:
+      - ./scripts/ensure-auth-database.sh:/scripts/ensure-auth-database.sh:ro
+    command: ["/scripts/ensure-auth-database.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "no", "--save", ""]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend-migrate:
+    build:
+      context: ./backend
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://zhitong:zhitong@db:5432/zhitong}
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+
+  auth-migrate:
+    build:
+      context: ./auth_service
+    environment:
+      DATABASE_URL: ${AUTH_DATABASE_URL:-postgresql+psycopg://zhitong:zhitong@db:5432/zhitong_auth}
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+
+  identity-migrate:
+    build:
+      context: ./auth_service
+    environment:
+      DATABASE_URL: ${AUTH_DATABASE_URL:-postgresql+psycopg://zhitong:zhitong@db:5432/zhitong_auth}
+      LEGACY_DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://zhitong:zhitong@db:5432/zhitong}
+      ISSUER: ${AUTH_ISSUER:-http://localhost:8001}
+    command: ["python", "-m", "app.legacy_migration"]
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      auth-migrate:
+        condition: service_completed_successfully
+
+  auth-service:
+    build:
+      context: ./auth_service
+    environment:
+      DATABASE_URL: ${AUTH_DATABASE_URL:-postgresql+psycopg://zhitong:zhitong@db:5432/zhitong_auth}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      PUBLIC_URL: ${AUTH_PUBLIC_URL:-http://localhost:8001}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      SESSION_SECRET: ${AUTH_SESSION_SECRET:-${SESSION_SECRET:-local-dev-auth-state-change-me}}
+      ISSUER: ${AUTH_ISSUER:-http://localhost:8001}
+      AUDIENCE: ${AUTH_AUDIENCE:-zhitong-api}
+      CLIENT_ID: ${AUTH_CLIENT_ID:-zhitong-web}
+      INTERNAL_CLIENT_SECRET: ${AUTH_INTERNAL_CLIENT_SECRET:-local-dev-bff-client-change-me}
+      BFF_CALLBACK_URL: ${BFF_CALLBACK_URL:-http://localhost:8000/auth/google/complete}
+      LOGIN_CODE_MAX_AGE_SECONDS: ${LOGIN_CODE_MAX_AGE_SECONDS:-60}
+      SIGNING_KEY_ID: ${AUTH_SIGNING_KEY_ID:-local-dev-1}
+      PRIVATE_KEY_PATH: /var/lib/zhitong-auth/keys/private.pem
+      PUBLIC_KEY_PATH: /var/lib/zhitong-auth/keys/public.pem
+      ACCESS_TOKEN_MAX_AGE_SECONDS: ${ACCESS_TOKEN_MAX_AGE_SECONDS:-900}
+      REFRESH_TOKEN_MAX_AGE_SECONDS: ${REFRESH_TOKEN_MAX_AGE_SECONDS:-2592000}
+      OAUTH_STATE_COOKIE_NAME: ${OAUTH_STATE_COOKIE_NAME:-zhitong_oauth_state}
+      LOGIN_FAILURE_LIMIT: ${LOGIN_FAILURE_LIMIT:-5}
+      LOGIN_FAILURE_WINDOW_SECONDS: ${LOGIN_FAILURE_WINDOW_SECONDS:-900}
+      LOGIN_LOCK_SECONDS: ${LOGIN_LOCK_SECONDS:-900}
+      COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+      COOKIE_SAME_SITE: ${AUTH_COOKIE_SAME_SITE:-lax}
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./auth_service/app:/app/app
+      - ./auth_service/alembic:/app/alembic
+      - ./auth_service/alembic.ini:/app/alembic.ini
+      - auth_signing_keys:/var/lib/zhitong-auth/keys
+    depends_on:
+      identity-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://zhitong:zhitong@db:5432/zhitong}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      AUTH_ISSUER: ${AUTH_ISSUER:-http://localhost:8001}
+      AUTH_AUDIENCE: ${AUTH_AUDIENCE:-zhitong-api}
+      AUTH_CLIENT_ID: ${AUTH_CLIENT_ID:-zhitong-web}
+      AUTH_JWKS_URL: http://auth-service:8001/.well-known/jwks.json
+      AUTH_INTERNAL_URL: http://auth-service:8001
+      AUTH_PUBLIC_URL: ${AUTH_PUBLIC_URL:-http://localhost:8001}
+      AUTH_INTERNAL_CLIENT_SECRET: ${AUTH_INTERNAL_CLIENT_SECRET:-local-dev-bff-client-change-me}
+      AUTH_ACCESS_TOKEN_MAX_AGE_SECONDS: ${ACCESS_TOKEN_MAX_AGE_SECONDS:-900}
+      REFRESH_TOKEN_MAX_AGE_SECONDS: ${REFRESH_TOKEN_MAX_AGE_SECONDS:-2592000}
+      BFF_TOKEN_ENCRYPTION_SECRET: ${BFF_TOKEN_ENCRYPTION_SECRET:-local-dev-refresh-vault-change-me}
+      BFF_SESSION_COOKIE_NAME: ${BFF_SESSION_COOKIE_NAME:-zhitong_web_session}
+      COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+      COOKIE_SAME_SITE: ${AUTH_COOKIE_SAME_SITE:-lax}
+      SESSION_MAX_AGE_SECONDS: ${SESSION_MAX_AGE_SECONDS:-604800}
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/alembic:/app/alembic
+      - ./backend/alembic.ini:/app/alembic.ini
+    depends_on:
+      identity-migrate:
+        condition: service_completed_successfully
+      auth-service:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  auth_signing_keys:
