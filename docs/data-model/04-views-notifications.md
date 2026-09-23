@@ -147,3 +147,7 @@ The PDF's numbers are illustrative. Product analytics must use the definitions a
 | `GET /api/v1/search?q=&workspace_id=&team_id=` | Authorized key/title search; never search across inaccessible teams. |
 
 Notification creation belongs in the same transaction as the issue/comment event or in a transactional outbox. A best-effort background task alone can lose inbox events after a process crash.
+
+### Implemented M4 query encoding
+
+The Summary endpoint accepts repeatable `cycle`, `project`, `status`, `priority`, `assignee`, and `label` parameters. The sentinel values `none` (cycle/project) and `unassigned` (assignee) include records without that relationship. `due`, `ownership`, `label_match`, `date_from`, `date_to`, `include_archived`, and `timezone` complete the allowlisted filter surface. Every referenced resource is validated against the selected team before aggregates run. The default trend window is fourteen viewer-local days; date filters affect the trend basis without silently changing snapshot cards.

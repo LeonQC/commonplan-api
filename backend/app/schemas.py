@@ -367,3 +367,18 @@ class ProjectRead(BaseModel):
     linked_issues: list[IssueRead] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
+
+
+class TeamSummaryRead(BaseModel):
+    scope: dict
+    filters: dict
+    headline_metrics: dict
+    status_distribution: list[dict]
+    priority_distribution: list[dict]
+    assignee_distribution: list[dict]
+    cycle_progress: dict | None
+    project_distribution: list[dict]
+    trend: dict
+    attention_issues: dict[str, list[dict]]
+    recent_activity: list[dict]
+    matching_issues: list[dict]

@@ -115,6 +115,8 @@ Exit demo:
 
 The canonical product/API contract is [04 — Team Summary, saved views, search, and inbox](../data-model/04-views-notifications.md).
 
+**Status:** implemented locally on `codex/m4-team-summary`; automated validation and the Team A/filter URL/Team B empty-state browser walkthrough are complete. Publication remains pending review.
+
 Scope:
 
 - Implement `GET /api/v1/workspaces/{workspaceId}/teams/{teamId}/summary`.
