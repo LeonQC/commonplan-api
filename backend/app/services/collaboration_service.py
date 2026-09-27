@@ -9,6 +9,7 @@ from app.repositories.collaboration_repository import CollaborationRepository, C
 from app.services.issue_service import IssueService, IssueServiceDep
 from app.services.resource_policy import ResourceForbidden, ResourceNotFound, ResourcePolicy
 from app.services.workspace_service import WorkspaceService, WorkspaceServiceDep
+from app.services.view_notification_service import ViewNotificationService, ViewNotificationServiceDep
 
 
 class CollaborationValidationError(Exception): pass
@@ -20,10 +21,12 @@ class CollaborationService:
         repository: CollaborationRepository,
         workspaces: WorkspaceService,
         issues: IssueService,
+        notifications: ViewNotificationService | None = None,
     ):
         self.repository = repository
         self.workspaces = workspaces
         self.issues = issues
+        self.notifications = notifications
         self.policy = ResourcePolicy(workspaces)
 
     def create_comment(self, user: User, workspace_id: str, key: str, body: str):
@@ -38,7 +41,8 @@ class CollaborationService:
         self._ensure_watcher(issue.id, user.id, "participated")
         for user_id in mentioned:
             self._ensure_watcher(issue.id, user_id, "mentioned")
-        self._event(issue.id, user.id, "comment.created", {"comment_id": comment.id, "mentioned_user_ids": sorted(mentioned)})
+        event_id = self._event(issue.id, user.id, "comment.created", {"comment_id": comment.id, "mentioned_user_ids": sorted(mentioned)})
+        self._notify(issue, event_id, user.id, "comment", mentioned, {"issue_key": issue.key, "comment_id": comment.id})
         self.repository.commit()
         self.repository.refresh(comment)
         return self._comment_activity(comment)
@@ -58,7 +62,8 @@ class CollaborationService:
         self.repository.replace_mentions(comment.id, mentioned)
         for user_id in mentioned:
             self._ensure_watcher(issue.id, user_id, "mentioned")
-        self._event(issue.id, user.id, "comment.updated", {"comment_id": comment.id, "mentioned_user_ids": sorted(mentioned)})
+        event_id = self._event(issue.id, user.id, "comment.updated", {"comment_id": comment.id, "mentioned_user_ids": sorted(mentioned)})
+        self._notify(issue, event_id, user.id, "comment_updated", mentioned, {"issue_key": issue.key, "comment_id": comment.id})
         self.repository.commit()
         self.repository.refresh(comment)
         return self._comment_activity(comment)
@@ -123,10 +128,21 @@ class CollaborationService:
             self.repository.add(IssueWatcher(issue_id=issue_id, user_id=user_id, reason=reason))
 
     def _event(self, issue_id, actor_user_id, event_type, changes):
+        event_id = str(uuid.uuid4())
         self.repository.add(IssueEvent(
-            id=str(uuid.uuid4()), issue_id=issue_id, actor_user_id=actor_user_id,
+            id=event_id, issue_id=issue_id, actor_user_id=actor_user_id,
             event_type=event_type, changes={"schema_version": 1, **changes},
         ))
+        return event_id
+
+    def _notify(self, issue, event_id, actor_user_id, kind, mentioned, payload):
+        if self.notifications is None:
+            return
+        recipients = self.repository.watcher_user_ids(issue.id) | set(mentioned)
+        self.notifications.enqueue_many(
+            recipients=recipients, workspace_id=issue.workspace_id, issue_id=issue.id,
+            event_id=event_id, actor_user_id=actor_user_id, kind=kind, payload=payload,
+        )
 
     def _comment_activity(self, comment):
         return {
@@ -140,8 +156,9 @@ def get_collaboration_service(
     repository: CollaborationRepositoryDep,
     workspaces: WorkspaceServiceDep,
     issues: IssueServiceDep,
+    notifications: ViewNotificationServiceDep,
 ) -> CollaborationService:
-    return CollaborationService(repository, workspaces, issues)
+    return CollaborationService(repository, workspaces, issues, notifications)
 
 
 CollaborationServiceDep = Annotated[CollaborationService, Depends(get_collaboration_service)]

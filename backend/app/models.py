@@ -337,3 +337,38 @@ class CommentMention(Base):
     comment_id: Mapped[str] = mapped_column(String(36), ForeignKey("issue_comments.id", ondelete="CASCADE"), primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SavedView(Base):
+    __tablename__ = "saved_views"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), index=True)
+    team_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("teams.id", ondelete="CASCADE"), nullable=True, index=True)
+    owner_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(255))
+    visibility: Mapped[str] = mapped_column(String(16), default="private")
+    filter_version: Mapped[int] = mapped_column(SmallInteger, default=1)
+    filter_spec: Mapped[dict] = mapped_column(JSON, default=dict)
+    group_by: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    sort_by: Mapped[str] = mapped_column(String(32), default="updated_at")
+    sort_direction: Mapped[str] = mapped_column(String(4), default="desc")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    recipient_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), index=True)
+    issue_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("issues.id", ondelete="CASCADE"), nullable=True)
+    issue_event_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("issue_events.id", ondelete="SET NULL"), nullable=True)
+    actor_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    kind: Mapped[str] = mapped_column(String(48))
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    dedupe_key: Mapped[str] = mapped_column(String(160), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

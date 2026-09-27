@@ -153,6 +153,8 @@ Exit demo:
 
 ## M6 — Saved views and Inbox
 
+**Status:** implemented locally on `codex/m6-views-inbox`; API tests, Web build, and migration round-trip validation are complete. Browser acceptance and stacked publication remain.
+
 Scope:
 
 - Add `saved_views` and `notifications`.

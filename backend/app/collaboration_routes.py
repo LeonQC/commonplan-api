@@ -17,7 +17,7 @@ def _error(exc):
     return HTTPException(status_code=422, detail=str(exc))
 
 
-@router.post("/workspaces/{workspace_id}/issues/{key}/collaboration/comments", response_model=IssueActivityRead, status_code=201)
+@router.post("/workspaces/{workspace_id}/issues/{key}/comments", response_model=IssueActivityRead, status_code=201)
 def create_comment(workspace_id: str, key: str, payload: IssueCommentCreate, current_user: CurrentUser, service: CollaborationServiceDep):
     try: return service.create_comment(current_user, workspace_id, key, payload.body)
     except Exception as exc: raise _error(exc) from exc

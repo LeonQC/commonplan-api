@@ -18,6 +18,7 @@ from app.issue_routes import router as issue_router
 from app.project_routes import router as project_router
 from app.summary_routes import router as summary_router
 from app.collaboration_routes import router as collaboration_router
+from app.view_notification_routes import router as view_notification_router
 
 
 @asynccontextmanager
@@ -41,6 +42,7 @@ business_router.include_router(issue_router)
 business_router.include_router(project_router)
 business_router.include_router(summary_router)
 business_router.include_router(collaboration_router)
+business_router.include_router(view_notification_router)
 
 
 @app.exception_handler(SessionStoreUnavailable)
