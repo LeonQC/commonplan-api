@@ -35,6 +35,7 @@ def _issue_read(service, issue, labels) -> IssueRead:
         creator_user_id=issue.creator_user_id, assignee_user_id=issue.assignee_user_id,
         cycle_id=issue.cycle_id, due_date=issue.due_date, version=issue.version,
         project_id=issue.project_id, milestone_id=issue.milestone_id,
+        parent_issue_id=issue.parent_issue_id,
         labels=[LabelRead.model_validate(label) for label in labels],
         created_at=issue.created_at, updated_at=issue.updated_at,
     )

@@ -277,6 +277,7 @@ class Issue(Base):
     cycle_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("cycles.id", ondelete="SET NULL"), nullable=True, index=True)
     project_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)
     milestone_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("project_milestones.id", ondelete="SET NULL"), nullable=True, index=True)
+    parent_issue_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("issues.id", ondelete="SET NULL"), nullable=True, index=True)
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     position: Mapped[Decimal] = mapped_column(Numeric(20, 6), default=0)
     version: Mapped[int] = mapped_column(default=1)
@@ -318,4 +319,21 @@ class IssueEvent(Base):
     )
     event_type: Mapped[str] = mapped_column(String(64))
     changes: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class IssueWatcher(Base):
+    __tablename__ = "issue_watchers"
+
+    issue_id: Mapped[str] = mapped_column(String(36), ForeignKey("issues.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True, index=True)
+    reason: Mapped[str] = mapped_column(String(24), default="manual")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CommentMention(Base):
+    __tablename__ = "comment_mentions"
+
+    comment_id: Mapped[str] = mapped_column(String(36), ForeignKey("issue_comments.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -137,6 +137,8 @@ Exit demo:
 
 ## M5 — Collaboration expansion
 
+**Status:** implemented locally on `codex/m5-collaboration`; automated API, Web build, and migration round-trip validation are complete. Browser acceptance and stacked publication remain.
+
 Scope:
 
 - Add comment edit/delete policy, mentions, sub-issues, watchers, and notification-producing collaboration events.

@@ -137,6 +137,8 @@ erDiagram
 | `issue_labels` | composite PK `(issue_id, label_id)` | Issue and label must belong to the same team. |
 | `issue_comments` | `id uuid PK`, `issue_id uuid FK`, `author_user_id integer FK`, `body text`, `created_at`, `edited_at NULL`, `deleted_at NULL` | Preserve thread chronology. Soft-delete body if needed while retaining event/audit history. |
 | `issue_events` | `id uuid PK`, `issue_id uuid FK`, `actor_user_id integer NULL FK`, `event_type varchar(64)`, `changes jsonb`, `created_at` | Append-only timeline for status/assignee/priority/project/cycle/comment/PR changes. Event payload is versioned and contains changed field names, not credentials. |
+| `issue_watchers` | `issue_id uuid FK`, `user_id integer FK`, `reason varchar(24)`, `created_at`, composite PK | Explicit watchers plus participants/mentioned members. Access is always rechecked against current team membership. |
+| `comment_mentions` | `comment_id uuid FK`, `user_id integer FK`, `created_at`, composite PK | Materialized mention recipients parsed from authorized team-member emails. Editing/deleting a comment replaces or clears its mentions transactionally. |
 
 Allocate `issues.number` by locking the owning `teams` row and incrementing `next_issue_number` in the same transaction. Store the resulting key as immutable text. Add indexes for `(team_id, workflow_state_id, position, id)`, `(assignee_user_id, archived_at, due_date)`, `(project_id, archived_at)`, `(cycle_id, archived_at)`, and `(issue_id, created_at)` on activity tables.
 
@@ -151,6 +153,10 @@ Allocate `issues.number` by locking the owning `teams` row and incrementing `nex
 | `GET/POST /api/v1/workspaces/{w}/teams/{t}/issues` | Cursor list with status, priority, assignee, project, cycle, label, due-date filters; create returns immutable key. |
 | `GET/PATCH /api/v1/workspaces/{w}/issues/{key}` | Detail and mutation; response includes properties, labels, sub-issues, PR links. `PATCH` requires the last seen `version`; stale writes return 409. |
 | `POST /api/v1/workspaces/{w}/issues/{key}/comments` | Add comment and timeline event transactionally. |
+| `PATCH/DELETE /api/v1/workspaces/{w}/issues/{key}/comments/{commentId}` | Author, team lead, or workspace admin/owner may edit or soft-delete according to resource policy. |
+| `GET /api/v1/workspaces/{w}/issues/{key}/collaboration` | Current watcher state, authorized watcher display data, and active sub-issues. |
+| `PUT/DELETE /api/v1/workspaces/{w}/issues/{key}/watch` | Idempotently watch or unwatch an issue. |
+| `POST /api/v1/workspaces/{w}/issues/{key}/sub-issues` | Create a same-team child issue through the canonical issue creation transaction. |
 | `GET /api/v1/workspaces/{w}/issues/{key}/activity` | Comments and events in stable chronological order. M2 returns the full stream; introduce cursor pagination before production-scale histories. |
 | `GET /api/v1/me/issues` | My issues across all teams the caller belongs to, with optional workspace filter. |
 
