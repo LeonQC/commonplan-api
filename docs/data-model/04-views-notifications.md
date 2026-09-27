@@ -151,3 +151,7 @@ Notification creation belongs in the same transaction as the issue/comment event
 ### Implemented M4 query encoding
 
 The Summary endpoint accepts repeatable `cycle`, `project`, `status`, `priority`, `assignee`, and `label` parameters. The sentinel values `none` (cycle/project) and `unassigned` (assignee) include records without that relationship. `due`, `ownership`, `label_match`, `date_from`, `date_to`, `include_archived`, and `timezone` complete the allowlisted filter surface. Every referenced resource is validated against the selected team before aggregates run. The default trend window is fourteen viewer-local days; date filters affect the trend basis without silently changing snapshot cards.
+
+### Implemented M4 layering
+
+`SummaryService` owns authorization, request normalization, and validation error translation. It delegates cross-domain read-model assembly to `SummaryOperator`, which composes the public `IssueRepository`, `ProjectRepository`, and `WorkspaceRepository` interfaces. Only concrete repository implementations own a SQLAlchemy session and issue database queries; neither the service nor the operator imports SQLAlchemy or accesses a repository's internal `db` attribute. This boundary keeps the Summary read model composable without coupling the application layer to persistence details.

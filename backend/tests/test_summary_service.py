@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import Base
 from app.models import User
+from app.operators.summary_operator import SummaryOperator
 from app.repositories.issue_repository import SqlAlchemyIssueRepository
 from app.repositories.project_repository import SqlAlchemyProjectRepository
 from app.repositories.workspace_repository import SqlAlchemyWorkspaceRepository
@@ -27,14 +28,20 @@ def context():
         db.commit()
         db.refresh(owner)
         db.refresh(teammate)
-        workspaces = WorkspaceService(SqlAlchemyWorkspaceRepository(db))
+        workspace_repository = SqlAlchemyWorkspaceRepository(db)
+        issue_repository = SqlAlchemyIssueRepository(db)
+        project_repository = SqlAlchemyProjectRepository(db)
+        workspaces = WorkspaceService(workspace_repository)
         workspace, _ = workspaces.create_workspace(owner, name="CommonPlan", slug="commonplan", description=None)
         workspaces.put_workspace_member(owner, workspace.id, teammate.id, "member")
         team, _ = workspaces.create_team(owner, workspace.id, name="Core", issue_prefix="KEY", description=None)
         workspaces.put_team_member(owner, workspace.id, team.id, teammate.id, "member")
-        issues = IssueService(SqlAlchemyIssueRepository(db), workspaces)
-        projects = ProjectService(SqlAlchemyProjectRepository(db), workspaces)
-        summary = SummaryService(SqlAlchemyIssueRepository(db), workspaces)
+        issues = IssueService(issue_repository, workspaces)
+        projects = ProjectService(project_repository, workspaces)
+        summary = SummaryService(
+            SummaryOperator(issue_repository, project_repository, workspace_repository),
+            workspaces,
+        )
         yield summary, issues, projects, workspaces, owner, teammate, workspace, team
 
 
@@ -74,3 +81,34 @@ def test_summary_rejects_cross_team_filter_references(context):
 
     with pytest.raises(SummaryValidationError):
         summary.team_summary(owner, workspace.id, team.id, {"status": ["unknown"], "timezone": "UTC"})
+
+
+def test_summary_layers_depend_only_on_repository_interfaces():
+    class EmptyIssues:
+        def states(self, _team_id): return []
+        def cycles(self, _team_id): return []
+        def labels(self, _team_id): return []
+        def recently_updated_issues(self, _team_id, *, include_archived=False): return []
+        def issue_label_pairs(self, _issue_ids): return []
+        def events_for_issues(self, _issue_ids, *, event_type=None, limit=None): return []
+        def comments_for_issues(self, _issue_ids, *, limit=None): return []
+        def users(self, _user_ids): return []
+
+    class EmptyProjects:
+        def projects(self, _team_id): return []
+
+    class EmptyWorkspaces:
+        def team_members(self, _team_id): return []
+        def get_team(self, _user, _workspace_id, _team_id): return object()
+
+    now = datetime.now(timezone.utc)
+    user = User(id=1, email="owner@example.com", name="Owner", auth_issuer="issuer", auth_subject="owner", is_deleted=False, created_at=now, updated_at=now)
+    repositories = EmptyIssues(), EmptyProjects(), EmptyWorkspaces()
+    operator = SummaryOperator(*repositories)
+    summary = SummaryService(operator, repositories[2])
+
+    result = summary.team_summary(user, "workspace", "team", {"timezone": "UTC"})
+
+    assert result["headline_metrics"]["total"] == 0
+    assert not hasattr(operator, "db")
+    assert not hasattr(summary, "db")
