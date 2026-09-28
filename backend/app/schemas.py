@@ -228,6 +228,7 @@ class IssueRead(BaseModel):
     cycle_id: str | None
     project_id: str | None
     milestone_id: str | None
+    parent_issue_id: str | None
     due_date: date | None
     version: int
     labels: list[LabelRead]
@@ -245,6 +246,23 @@ class IssueCommentCreate(BaseModel):
         if not normalized:
             raise ValueError("Comment cannot be empty")
         return normalized
+
+
+class IssueCommentPatch(IssueCommentCreate):
+    pass
+
+
+class IssueWatcherRead(BaseModel):
+    user_id: int
+    name: str
+    reason: str
+    created_at: datetime
+
+
+class IssueCollaborationRead(BaseModel):
+    watching: bool
+    watchers: list[IssueWatcherRead]
+    sub_issues: list[IssueRead]
 
 
 class IssueActivityRead(BaseModel):
