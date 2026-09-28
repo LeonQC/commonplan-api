@@ -13,7 +13,7 @@ def users():
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)
     with Session(engine) as db:
-        yield UserService(SqlAlchemyUserRepository(db), db)
+        yield UserService(SqlAlchemyUserRepository(db))
 
 
 def test_create_normalizes_email_and_rejects_case_insensitive_duplicate(users):

@@ -1,7 +1,8 @@
 from typing import Annotated, Protocol
 
 from fastapi import Depends
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import DbSession
@@ -13,11 +14,10 @@ from app.models import (
     WorkspaceInvitation,
     WorkspaceMembership,
 )
+from app.repositories.errors import RepositoryConflictError
 
 
 class WorkspaceRepository(Protocol):
-    db: Session
-
     def workspace(self, workspace_id: str) -> Workspace | None: ...
     def workspace_by_slug(self, slug: str) -> Workspace | None: ...
     def workspace_membership(self, workspace_id: str, user_id: int) -> WorkspaceMembership | None: ...
@@ -27,10 +27,13 @@ class WorkspaceRepository(Protocol):
     def teams_for_user(self, workspace_id: str, user_id: int, include_all: bool) -> list[tuple[Team, TeamMembership | None]]: ...
     def workspace_members(self, workspace_id: str) -> list[tuple[User, WorkspaceMembership]]: ...
     def team_members(self, team_id: str) -> list[tuple[User, TeamMembership]]: ...
+    def user(self, user_id: int) -> User | None: ...
+    def delete_team_memberships_for_workspace(self, workspace_id: str, user_id: int) -> None: ...
+    def other_active_owner_count(self, workspace_id: str, excluded_user_id: int) -> int: ...
     def invitation_by_hash(self, token_hash: str) -> WorkspaceInvitation | None: ...
     def add(self, record: object) -> None: ...
     def delete(self, record: object) -> None: ...
-    def commit(self) -> None: ...
+    def save_changes(self) -> None: ...
     def refresh(self, record: object) -> None: ...
 
 
@@ -93,6 +96,26 @@ class SqlAlchemyWorkspaceRepository:
         )
         return list(self.db.execute(stmt).all())
 
+    def user(self, user_id: int) -> User | None:
+        return self.db.get(User, user_id)
+
+    def delete_team_memberships_for_workspace(self, workspace_id: str, user_id: int) -> None:
+        team_ids = select(Team.id).where(Team.workspace_id == workspace_id)
+        self.db.query(TeamMembership).filter(
+            TeamMembership.user_id == user_id,
+            TeamMembership.team_id.in_(team_ids),
+        ).delete(synchronize_session=False)
+
+    def other_active_owner_count(self, workspace_id: str, excluded_user_id: int) -> int:
+        return self.db.scalar(
+            select(func.count()).select_from(WorkspaceMembership).where(
+                WorkspaceMembership.workspace_id == workspace_id,
+                WorkspaceMembership.role == "owner",
+                WorkspaceMembership.status == "active",
+                WorkspaceMembership.user_id != excluded_user_id,
+            )
+        ) or 0
+
     def invitation_by_hash(self, token_hash: str) -> WorkspaceInvitation | None:
         return self.db.scalar(select(WorkspaceInvitation).where(WorkspaceInvitation.token_hash == token_hash))
 
@@ -102,8 +125,12 @@ class SqlAlchemyWorkspaceRepository:
     def delete(self, record: object) -> None:
         self.db.delete(record)
 
-    def commit(self) -> None:
-        self.db.commit()
+    def save_changes(self) -> None:
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise RepositoryConflictError from exc
 
     def refresh(self, record: object) -> None:
         self.db.refresh(record)

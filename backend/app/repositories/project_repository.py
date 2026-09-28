@@ -2,14 +2,15 @@ from typing import Annotated, Protocol
 
 from fastapi import Depends
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import DbSession
-from app.models import Issue, Project, ProjectMilestone, ProjectObjective, ProjectUpdate, User, WorkflowState
+from app.models import Issue, IssueLabel, Label, Project, ProjectMilestone, ProjectObjective, ProjectUpdate, User, WorkflowState
+from app.repositories.errors import RepositoryConflictError
 
 
 class ProjectRepository(Protocol):
-    db: Session
     def projects(self, team_id: str) -> list[Project]: ...
     def project(self, project_id: str, *, for_update: bool = False) -> Project | None: ...
     def objectives(self, project_id: str) -> list[ProjectObjective]: ...
@@ -19,9 +20,10 @@ class ProjectRepository(Protocol):
     def updates(self, project_id: str) -> list[ProjectUpdate]: ...
     def issues(self, project_id: str) -> list[Issue]: ...
     def state(self, state_id: str) -> WorkflowState | None: ...
+    def issue_labels(self, issue_id: str) -> list[Label]: ...
     def user(self, user_id: int | None) -> User | None: ...
     def add(self, record: object) -> None: ...
-    def commit(self) -> None: ...
+    def save_changes(self) -> None: ...
     def refresh(self, record: object) -> None: ...
 
 
@@ -79,14 +81,26 @@ class SqlAlchemyProjectRepository:
     def state(self, state_id: str) -> WorkflowState | None:
         return self.db.get(WorkflowState, state_id)
 
+    def issue_labels(self, issue_id: str) -> list[Label]:
+        return list(self.db.scalars(
+            select(Label)
+            .join(IssueLabel, IssueLabel.label_id == Label.id)
+            .where(IssueLabel.issue_id == issue_id)
+            .order_by(Label.name)
+        ))
+
     def user(self, user_id: int | None) -> User | None:
         return self.db.get(User, user_id) if user_id is not None else None
 
     def add(self, record: object) -> None:
         self.db.add(record)
 
-    def commit(self) -> None:
-        self.db.commit()
+    def save_changes(self) -> None:
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise RepositoryConflictError from exc
 
     def refresh(self, record: object) -> None:
         self.db.refresh(record)

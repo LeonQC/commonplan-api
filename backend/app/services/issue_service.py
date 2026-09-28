@@ -4,9 +4,8 @@ from decimal import Decimal
 from typing import Annotated
 
 from fastapi import Depends
-from sqlalchemy.exc import IntegrityError
-
 from app.models import Cycle, Issue, IssueComment, IssueEvent, Label, Project, User
+from app.repositories.errors import RepositoryConflictError
 from app.repositories.issue_repository import IssueRepository, IssueRepositoryDep
 from app.services.workspace_service import WorkspaceService, WorkspaceServiceDep
 
@@ -92,7 +91,7 @@ class IssueService:
             position=Decimal(number), version=1,
         )
         self.repository.add(issue)
-        self.repository.db.flush()
+        self.repository.flush()
         self.repository.replace_labels(issue.id, values.get("label_ids", []))
         self._event(
             issue,
@@ -110,6 +109,12 @@ class IssueService:
             raise IssueNotFound
         self._access(user, workspace_id, issue.team_id)
         return issue, self.repository.issue_labels(issue.id)
+
+    def issue_details(self, issue: Issue, labels=None):
+        """Return presentation data without exposing repository access to routes."""
+        state = self.repository.state(issue.workflow_state_id)
+        resolved_labels = labels if labels is not None else self.repository.issue_labels(issue.id)
+        return state, resolved_labels
 
     def update_issue(self, user: User, workspace_id: str, key: str, changes: dict):
         issue = self.repository.issue(workspace_id, key, for_update=True)
@@ -166,7 +171,7 @@ class IssueService:
             body=body.strip(),
         )
         self.repository.add(comment)
-        self.repository.db.flush()
+        self.repository.flush()
         self._event(
             issue,
             user,
@@ -187,12 +192,9 @@ class IssueService:
         return sorted(rows, key=lambda row: (row["created_at"], row["id"]))
 
     def my_issues(self, user: User, workspace_id: str | None = None):
-        from sqlalchemy import select
-        stmt = select(Issue).where(Issue.assignee_user_id == user.id, Issue.archived_at.is_(None))
         if workspace_id:
             self.workspaces.get_workspace(user, workspace_id)
-            stmt = stmt.where(Issue.workspace_id == workspace_id)
-        issues = list(self.repository.db.scalars(stmt.order_by(Issue.updated_at.desc(), Issue.id)))
+        issues = self.repository.assigned_issues(user.id, workspace_id)
         visible = []
         for issue in issues:
             try:
@@ -203,7 +205,6 @@ class IssueService:
         return visible
 
     def team_overview(self, user: User, workspace_id: str, team_id: str):
-        from sqlalchemy import func, select
         self._access(user, workspace_id, team_id)
         issues = self.repository.issues(team_id)
         state_categories = {
@@ -220,11 +221,7 @@ class IssueService:
         )
         return {
             "team_id": team_id,
-            "project_count": self.repository.db.scalar(
-                select(func.count()).select_from(Project).where(
-                    Project.team_id == team_id, Project.archived_at.is_(None)
-                )
-            ) or 0,
+            "project_count": self.repository.active_project_count(team_id),
             "open_issue_count": sum(
                 state_categories.get(issue.workflow_state_id) not in {"done", "canceled"}
                 for issue in issues
@@ -259,7 +256,7 @@ class IssueService:
             raise IssueForbidden from exc
 
     def _validate_refs(self, team_id, assignee_user_id, cycle_id, label_ids, project_id=None, milestone_id=None):
-        if assignee_user_id is not None and self.workspaces.repository.team_membership(team_id, assignee_user_id) is None:
+        if assignee_user_id is not None and not self.workspaces.is_team_member(team_id, assignee_user_id):
             raise IssueValidationError("Assignee must be an active team member")
         if cycle_id is not None:
             cycle = self.repository.cycle(cycle_id)
@@ -320,9 +317,8 @@ class IssueService:
 
     def _commit(self):
         try:
-            self.repository.commit()
-        except IntegrityError as exc:
-            self.repository.db.rollback()
+            self.repository.save_changes()
+        except RepositoryConflictError as exc:
             raise IssueConflict("Issue planning value already exists") from exc
 
 

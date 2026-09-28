@@ -224,7 +224,7 @@ def test_google_identity_is_owned_by_auth_service(monkeypatch):
 def test_one_time_google_code_can_only_be_exchanged_once():
     user_auth = register()
     with TestingSession() as db:
-        service = TokenService(SqlAlchemyRefreshTokenRepository(db), db, test_keys)
+        service = TokenService(SqlAlchemyRefreshTokenRepository(db), test_keys)
         code = service.issue_login_code(db.get(IdentityUser, user_auth["user"]["id"]))
 
     first = client.post(

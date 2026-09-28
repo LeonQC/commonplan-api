@@ -6,10 +6,7 @@ from typing import Annotated
 
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import Depends
-from sqlalchemy.orm import Session
-
 from app.config import settings
-from app.database import DbSession
 from app.models import BrowserAuthSession
 from app.repositories.browser_auth_session_repository import (
     BrowserAuthSessionRepository,
@@ -29,10 +26,8 @@ class BrowserAuthSessionService:
     def __init__(
         self,
         repository: BrowserAuthSessionRepository,
-        db: Session,
     ):
         self.repository = repository
-        self.db = db
         key = base64.urlsafe_b64encode(
             hashlib.sha256(settings.bff_token_encryption_secret.encode("utf-8")).digest()
         )
@@ -49,7 +44,7 @@ class BrowserAuthSessionService:
                 + timedelta(seconds=settings.refresh_token_max_age_seconds),
             )
         )
-        self.db.commit()
+        self.repository.save_changes()
         return session_id
 
     def load_for_refresh(self, session_id: str | None) -> tuple[BrowserAuthSession, str]:
@@ -64,7 +59,7 @@ class BrowserAuthSessionService:
             expires_at = expires_at.replace(tzinfo=timezone.utc)
         if expires_at <= now:
             record.revoked_at = now
-            self.db.commit()
+            self.repository.save_changes()
             raise InvalidBrowserSession
         try:
             refresh_token = self.cipher.decrypt(
@@ -72,7 +67,7 @@ class BrowserAuthSessionService:
             ).decode("utf-8")
         except InvalidToken as exc:
             record.revoked_at = now
-            self.db.commit()
+            self.repository.save_changes()
             raise InvalidBrowserSession from exc
         return record, refresh_token
 
@@ -86,12 +81,12 @@ class BrowserAuthSessionService:
         record.expires_at = datetime.now(timezone.utc) + timedelta(
             seconds=settings.refresh_token_max_age_seconds
         )
-        self.db.commit()
+        self.repository.save_changes()
         return session_id
 
     def revoke(self, record: BrowserAuthSession) -> None:
         record.revoked_at = datetime.now(timezone.utc)
-        self.db.commit()
+        self.repository.save_changes()
 
     def _encrypt(self, refresh_token: str) -> str:
         return self.cipher.encrypt(refresh_token.encode("utf-8")).decode("ascii")
@@ -99,9 +94,8 @@ class BrowserAuthSessionService:
 
 def get_browser_auth_session_service(
     repository: BrowserAuthSessionRepositoryDep,
-    db: DbSession,
 ) -> BrowserAuthSessionService:
-    return BrowserAuthSessionService(repository, db)
+    return BrowserAuthSessionService(repository)
 
 
 BrowserAuthSessionServiceDep = Annotated[

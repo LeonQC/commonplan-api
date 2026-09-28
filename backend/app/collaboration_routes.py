@@ -40,7 +40,7 @@ def _collaboration_read(service, current_user, workspace_id, key):
     return IssueCollaborationRead(
         watching=data["watching"],
         watchers=[IssueWatcherRead(user_id=user.id, name=user.name, reason=watcher.reason, created_at=watcher.created_at) for watcher, user in data["watchers"]],
-        sub_issues=[_issue_read(service.issues, issue, service.issues.repository.issue_labels(issue.id)) for issue in data["children"]],
+        sub_issues=[_issue_read(service.issues, issue, None) for issue in data["children"]],
     )
 
 

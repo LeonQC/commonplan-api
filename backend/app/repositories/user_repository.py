@@ -2,10 +2,12 @@ from typing import Annotated, Protocol
 
 from fastapi import Depends
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import DbSession
 from app.models import User
+from app.repositories.errors import RepositoryConflictError
 
 
 class UserRepository(Protocol):
@@ -20,6 +22,8 @@ class UserRepository(Protocol):
     def add(self, user: User) -> None: ...
 
     def refresh(self, user: User) -> None: ...
+
+    def save_changes(self) -> None: ...
 
 
 class SqlAlchemyUserRepository:
@@ -55,6 +59,13 @@ class SqlAlchemyUserRepository:
 
     def refresh(self, user: User) -> None:
         self.db.refresh(user)
+
+    def save_changes(self) -> None:
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise RepositoryConflictError from exc
 
 
 def get_user_repository(db: DbSession) -> UserRepository:

@@ -7,11 +7,7 @@ from typing import Annotated
 
 import jwt
 from fastapi import Depends
-from sqlalchemy import select
-from sqlalchemy.orm import Session
-
 from app.config import settings
-from app.database import DbSession
 from app.models import IdentityUser, LoginCode, RefreshToken
 from app.repositories.refresh_token_repository import (
     RefreshTokenRepository,
@@ -47,11 +43,9 @@ class TokenService:
     def __init__(
         self,
         repository: RefreshTokenRepository,
-        db: Session,
         signing_keys: SigningKeys,
     ):
         self.repository = repository
-        self.db = db
         self.signing_keys = signing_keys
 
     def issue_pair(
@@ -66,7 +60,7 @@ class TokenService:
             family_id=family_id or str(uuid.uuid4()),
         )
         self.repository.add(refresh_record)
-        self.db.commit()
+        self.repository.save_changes()
         return pair
 
     def rotate(self, raw_refresh: str | None) -> tuple[str, TokenPair]:
@@ -78,29 +72,29 @@ class TokenService:
             raise InvalidRefreshToken
         if current.revoked_at is not None:
             self.repository.revoke_family(current.family_id, now)
-            self.db.commit()
+            self.repository.save_changes()
             raise InvalidRefreshToken
         expires_at = current.expires_at
         if expires_at.tzinfo is None:
             expires_at = expires_at.replace(tzinfo=timezone.utc)
         if expires_at <= now:
             current.revoked_at = now
-            self.db.commit()
+            self.repository.save_changes()
             raise InvalidRefreshToken
 
         user_id = current.user_id
         family_id = current.family_id
         current.revoked_at = now
-        user = self.db.get(IdentityUser, user_id)
+        user = self.repository.user(user_id)
         if user is None or not user.is_active:
             self.repository.revoke_family(family_id, now)
-            self.db.commit()
+            self.repository.save_changes()
             raise InvalidRefreshToken
 
         pair, replacement = self._build_pair(user, now=now, family_id=family_id)
         self.repository.add(replacement)
         current.replaced_by_hash = hash_refresh_token(pair.refresh_token)
-        self.db.commit()
+        self.repository.save_changes()
         return user_id, pair
 
     def revoke(self, raw_refresh: str | None) -> None:
@@ -109,11 +103,11 @@ class TokenService:
         current = self.repository.get_for_update(hash_refresh_token(raw_refresh))
         if current is not None and current.revoked_at is None:
             current.revoked_at = datetime.now(timezone.utc)
-            self.db.commit()
+            self.repository.save_changes()
 
     def issue_login_code(self, user: IdentityUser) -> str:
         raw_code = secrets.token_urlsafe(32)
-        self.db.add(
+        self.repository.add_login_code(
             LoginCode(
                 code_hash=hash_login_code(raw_code),
                 user_id=user.id,
@@ -121,16 +115,12 @@ class TokenService:
                 + timedelta(seconds=settings.login_code_max_age_seconds),
             )
         )
-        self.db.commit()
+        self.repository.save_changes()
         return raw_code
 
     def exchange_login_code(self, raw_code: str) -> tuple[IdentityUser, TokenPair]:
         now = datetime.now(timezone.utc)
-        record = self.db.scalar(
-            select(LoginCode)
-            .where(LoginCode.code_hash == hash_login_code(raw_code))
-            .with_for_update()
-        )
+        record = self.repository.login_code_for_update(hash_login_code(raw_code))
         if record is None or record.used_at is not None:
             raise InvalidRefreshToken
         expires_at = record.expires_at
@@ -138,7 +128,7 @@ class TokenService:
             expires_at = expires_at.replace(tzinfo=timezone.utc)
         if expires_at <= now:
             raise InvalidRefreshToken
-        user = self.db.get(IdentityUser, record.user_id)
+        user = self.repository.user(record.user_id)
         if user is None or not user.is_active:
             raise InvalidRefreshToken
         record.used_at = now
@@ -146,7 +136,7 @@ class TokenService:
             user, now=now, family_id=str(uuid.uuid4())
         )
         self.repository.add(refresh_record)
-        self.db.commit()
+        self.repository.save_changes()
         return user, pair
 
     def decode_access_token(self, token: str) -> str:
@@ -210,10 +200,9 @@ class TokenService:
 
 def get_token_service(
     repository: RefreshTokenRepositoryDep,
-    db: DbSession,
     signing_keys: Annotated[SigningKeys, Depends(get_signing_keys)],
 ) -> TokenService:
-    return TokenService(repository, db, signing_keys)
+    return TokenService(repository, signing_keys)
 
 
 TokenServiceDep = Annotated[TokenService, Depends(get_token_service)]

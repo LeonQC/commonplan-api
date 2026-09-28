@@ -4,10 +4,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import Depends
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
-
-from app.database import DbSession
 from app.config import settings
 from app.models import ExternalIdentity, IdentityUser, LoginAttempt
 from app.passwords import hash_password, verify_password
@@ -15,6 +11,7 @@ from app.repositories.identity_repository import (
     IdentityRepository,
     IdentityRepositoryDep,
 )
+from app.repositories.errors import RepositoryConflictError
 
 
 class IdentityConflict(Exception):
@@ -31,9 +28,8 @@ def normalize_email(email: str) -> str:
 
 
 class IdentityService:
-    def __init__(self, repository: IdentityRepository, db: Session):
+    def __init__(self, repository: IdentityRepository):
         self.repository = repository
-        self.db = db
 
     def get_active_by_id(self, user_id: str) -> IdentityUser | None:
         user = self.repository.get_user_by_id(user_id)
@@ -58,7 +54,7 @@ class IdentityService:
         normalized = normalize_email(email)
         now = datetime.now(timezone.utc)
         identifier_hash = hashlib.sha256(normalized.encode()).hexdigest()
-        attempt = self.db.get(LoginAttempt, identifier_hash)
+        attempt = self.repository.login_attempt(identifier_hash)
         if attempt is not None and attempt.locked_until is not None:
             locked_until = attempt.locked_until
             if locked_until.tzinfo is None:
@@ -80,8 +76,8 @@ class IdentityService:
             self._record_login_failure(identifier_hash, attempt, now)
             return None
         if attempt is not None:
-            self.db.delete(attempt)
-            self.db.commit()
+            self.repository.delete_login_attempt(attempt)
+            self.repository.save_changes()
         return user
 
     def _record_login_failure(
@@ -97,7 +93,7 @@ class IdentityService:
                 failed_attempts=0,
                 window_started_at=now,
             )
-            self.db.add(attempt)
+            self.repository.add_login_attempt(attempt)
         else:
             started_at = attempt.window_started_at
             if started_at.tzinfo is None:
@@ -110,7 +106,7 @@ class IdentityService:
         attempt.failed_attempts += 1
         if attempt.failed_attempts >= settings.login_failure_limit:
             attempt.locked_until = now + timedelta(seconds=settings.login_lock_seconds)
-        self.db.commit()
+        self.repository.save_changes()
 
     def upsert_google_identity(
         self,
@@ -146,9 +142,8 @@ class IdentityService:
 
     def _commit(self, user: IdentityUser) -> IdentityUser:
         try:
-            self.db.commit()
-        except IntegrityError as exc:
-            self.db.rollback()
+            self.repository.save_changes()
+        except RepositoryConflictError as exc:
             raise IdentityConflict from exc
         self.repository.refresh_user(user)
         return user
@@ -156,9 +151,8 @@ class IdentityService:
 
 def get_identity_service(
     repository: IdentityRepositoryDep,
-    db: DbSession,
 ) -> IdentityService:
-    return IdentityService(repository, db)
+    return IdentityService(repository)
 
 
 IdentityServiceDep = Annotated[IdentityService, Depends(get_identity_service)]

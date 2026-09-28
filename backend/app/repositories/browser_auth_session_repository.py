@@ -13,6 +13,8 @@ class BrowserAuthSessionRepository(Protocol):
 
     def get_for_update(self, session_hash: str) -> BrowserAuthSession | None: ...
 
+    def save_changes(self) -> None: ...
+
 
 class SqlAlchemyBrowserAuthSessionRepository:
     def __init__(self, db: Session):
@@ -27,6 +29,9 @@ class SqlAlchemyBrowserAuthSessionRepository:
             .where(BrowserAuthSession.session_hash == session_hash)
             .with_for_update()
         )
+
+    def save_changes(self) -> None:
+        self.db.commit()
 
 
 def get_browser_auth_session_repository(

@@ -1,15 +1,16 @@
 from typing import Annotated, Protocol
 
 from fastapi import Depends
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import DbSession
 from app.models import Cycle, Issue, IssueComment, IssueEvent, IssueLabel, Label, Project, ProjectMilestone, Team, User, WorkflowState
+from app.repositories.errors import RepositoryConflictError
 
 
 class IssueRepository(Protocol):
-    db: Session
     def team_for_update(self, team_id: str) -> Team | None: ...
     def states(self, team_id: str) -> list[WorkflowState]: ...
     def state(self, state_id: str) -> WorkflowState | None: ...
@@ -23,6 +24,8 @@ class IssueRepository(Protocol):
     def issue(self, workspace_id: str, key: str, *, for_update: bool = False) -> Issue | None: ...
     def issue_by_id(self, issue_id: str) -> Issue | None: ...
     def issues(self, team_id: str, **filters) -> list[Issue]: ...
+    def assigned_issues(self, user_id: int, workspace_id: str | None = None) -> list[Issue]: ...
+    def active_project_count(self, team_id: str) -> int: ...
     def recently_updated_issues(self, team_id: str, *, include_archived: bool = False) -> list[Issue]: ...
     def issue_labels(self, issue_id: str) -> list[Label]: ...
     def issue_label_pairs(self, issue_ids: list[str]) -> list[tuple[str, str]]: ...
@@ -34,7 +37,8 @@ class IssueRepository(Protocol):
     def events(self, issue_id: str) -> list[IssueEvent]: ...
     def user(self, user_id: int | None) -> User | None: ...
     def add(self, record: object) -> None: ...
-    def commit(self) -> None: ...
+    def flush(self) -> None: ...
+    def save_changes(self) -> None: ...
     def refresh(self, record: object) -> None: ...
 
 
@@ -94,6 +98,23 @@ class SqlAlchemyIssueRepository:
         if filters.get("assignee_user_id"):
             stmt = stmt.where(Issue.assignee_user_id == filters["assignee_user_id"])
         return list(self.db.scalars(stmt.order_by(Issue.position, Issue.created_at, Issue.id)))
+
+    def assigned_issues(self, user_id: int, workspace_id: str | None = None) -> list[Issue]:
+        stmt = select(Issue).where(
+            Issue.assignee_user_id == user_id,
+            Issue.archived_at.is_(None),
+        )
+        if workspace_id is not None:
+            stmt = stmt.where(Issue.workspace_id == workspace_id)
+        return list(self.db.scalars(stmt.order_by(Issue.updated_at.desc(), Issue.id)))
+
+    def active_project_count(self, team_id: str) -> int:
+        return self.db.scalar(
+            select(func.count()).select_from(Project).where(
+                Project.team_id == team_id,
+                Project.archived_at.is_(None),
+            )
+        ) or 0
 
     def recently_updated_issues(self, team_id: str, *, include_archived: bool = False) -> list[Issue]:
         stmt = select(Issue).where(Issue.team_id == team_id)
@@ -171,8 +192,19 @@ class SqlAlchemyIssueRepository:
     def add(self, record: object) -> None:
         self.db.add(record)
 
-    def commit(self) -> None:
-        self.db.commit()
+    def flush(self) -> None:
+        try:
+            self.db.flush()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise RepositoryConflictError from exc
+
+    def save_changes(self) -> None:
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise RepositoryConflictError from exc
 
     def refresh(self, record: object) -> None:
         self.db.refresh(record)
