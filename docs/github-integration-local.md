@@ -17,11 +17,13 @@ docker exec project-zhitong-1-db-1 psql -U zhitong -d zhitong \
   -c 'SELECT id, name, slug FROM workspaces ORDER BY created_at;'
 ```
 
-Get the numeric GitHub owner ID. `LeonQC` is the owner login in this example:
+Get the numeric GitHub owner ID. This project accepts pull requests from the `wangd606` forks:
 
 ```bash
-curl --fail --silent https://api.github.com/users/LeonQC
+gh api users/wangd606 --jq '{login: .login, id: .id}'
 ```
+
+The expected owner ID is `297650267`. Fetch it rather than relying only on the documented value so the setup remains verifiable.
 
 Use the response's numeric `id`, not the login name, as the allowlist boundary. Repository webhooks from either an organization or a personal account expose this value as `repository.owner.id`.
 
@@ -37,8 +39,8 @@ Add these values to the API repository's root `.env` file. Do not commit the fil
 
 ```dotenv
 GITHUB_WEBHOOK_SECRET=<generated value>
-GITHUB_ALLOWED_OWNER_ID=<numeric owner id>
-GITHUB_ALLOWED_OWNER_LOGIN=LeonQC
+GITHUB_ALLOWED_OWNER_ID=297650267
+GITHUB_ALLOWED_OWNER_LOGIN=wangd606
 GITHUB_WORKSPACE_ID=<CommonPlan workspace UUID>
 GITHUB_HOOK_ID=
 ```
@@ -67,7 +69,10 @@ The client should report that the public channel is forwarding to `http://localh
 
 ## 4. Add the GitHub webhook
 
-In each repository that should participate:
+Add the webhook to both fork repositories that should participate:
+
+- `wangd606/commonplan-api`
+- `wangd606/commonplan-web`
 
 1. Open **Settings → Webhooks → Add webhook**.
 2. Set **Payload URL** to the smee channel URL—not the localhost target.

@@ -36,12 +36,12 @@ def payload(title: str, updated_at: str, *, owner_id: int = 101) -> dict:
         "number": 12,
         "repository": {
             "id": 501,
-            "full_name": "LeonQC/commonplan-api",
-            "owner": {"id": owner_id, "login": "LeonQC"},
+            "full_name": "wangd606/commonplan-api",
+            "owner": {"id": owner_id, "login": "wangd606"},
         },
         "pull_request": {
             "title": title,
-            "html_url": "https://github.com/LeonQC/commonplan-api/pull/12",
+            "html_url": "https://github.com/wangd606/commonplan-api/pull/12",
             "state": "open",
             "draft": False,
             "merged": False,
@@ -80,7 +80,7 @@ def context(monkeypatch):
         service = GitHubIntegrationService(repository, workspaces, issues)
         monkeypatch.setattr(settings, "github_webhook_secret", SECRET)
         monkeypatch.setattr(settings, "github_allowed_owner_id", 101)
-        monkeypatch.setattr(settings, "github_allowed_owner_login", "LeonQC")
+        monkeypatch.setattr(settings, "github_allowed_owner_login", "wangd606")
         monkeypatch.setattr(settings, "github_workspace_id", workspace.id)
         monkeypatch.setattr(settings, "github_hook_id", None)
         yield service, repository, owner, workspace, issue
