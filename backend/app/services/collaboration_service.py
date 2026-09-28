@@ -36,6 +36,9 @@ class CollaborationService:
             raise CollaborationValidationError("Comment cannot be empty")
         comment = IssueComment(id=str(uuid.uuid4()), issue_id=issue.id, author_user_id=user.id, body=normalized)
         self.repository.add(comment)
+        # CommentMention has no ORM relationship to advertise insert ordering, so
+        # persist the parent row before adding its foreign-key children.
+        self.repository.flush()
         mentioned = self._mentioned_users(user, workspace_id, issue.team_id, mentioned_user_ids or [])
         self.repository.replace_mentions(comment.id, mentioned)
         self._ensure_watcher(issue.id, user.id, "participated")

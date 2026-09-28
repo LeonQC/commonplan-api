@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 
 from app.database import Base
@@ -18,6 +18,7 @@ from app.services.workspace_service import WorkspaceService
 @pytest.fixture
 def context():
     engine = create_engine("sqlite://")
+    event.listen(engine, "connect", lambda connection, _record: connection.execute("PRAGMA foreign_keys=ON"))
     Base.metadata.create_all(engine)
     with Session(engine) as db:
         now = datetime.now(timezone.utc)
