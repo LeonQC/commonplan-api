@@ -238,6 +238,7 @@ class IssueRead(BaseModel):
 
 class IssueCommentCreate(BaseModel):
     body: str = Field(min_length=1, max_length=20000)
+    mentioned_user_ids: list[int] = Field(default_factory=list, max_length=100)
 
     @field_validator("body")
     @classmethod
@@ -246,6 +247,11 @@ class IssueCommentCreate(BaseModel):
         if not normalized:
             raise ValueError("Comment cannot be empty")
         return normalized
+
+    @field_validator("mentioned_user_ids")
+    @classmethod
+    def unique_mentions(cls, value: list[int]) -> list[int]:
+        return list(dict.fromkeys(value))
 
 
 class IssueCommentPatch(IssueCommentCreate):

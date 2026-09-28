@@ -12,7 +12,7 @@ from app.repositories.issue_repository import SqlAlchemyIssueRepository
 from app.repositories.project_repository import SqlAlchemyProjectRepository
 from app.repositories.view_notification_repository import SqlAlchemyViewNotificationRepository
 from app.repositories.workspace_repository import SqlAlchemyWorkspaceRepository
-from app.services.collaboration_service import CollaborationService
+from app.services.collaboration_service import CollaborationService, CollaborationValidationError
 from app.services.issue_service import IssueService
 from app.services.summary_service import SummaryService
 from app.services.view_notification_service import ViewNotificationService
@@ -62,7 +62,7 @@ def test_saved_team_view_executes_shared_filter_without_bypassing_access(context
 
 def test_mentions_create_durable_inbox_items_and_removed_access_hides_them(context):
     views, collaboration, workspaces, owner, teammate, workspace, team, issue = context
-    collaboration.create_comment(owner, workspace.id, issue.key, "Please review @team@example.com")
+    collaboration.create_comment(owner, workspace.id, issue.key, "Please review @Teammate", [teammate.id])
 
     inbox = views.inbox(teammate, workspace.id, unread_only=False)
     assert inbox["unread_count"] == 1
@@ -72,6 +72,28 @@ def test_mentions_create_durable_inbox_items_and_removed_access_hides_them(conte
     views.mark_read(teammate, notification.id)
     assert views.inbox(teammate, workspace.id, unread_only=True)["notifications"] == []
 
-    collaboration.create_comment(owner, workspace.id, issue.key, "Again @team@example.com")
+    collaboration.create_comment(owner, workspace.id, issue.key, "Again @Teammate", [teammate.id])
     workspaces.delete_team_member(owner, workspace.id, team.id, teammate.id)
     assert views.inbox(teammate, workspace.id, unread_only=False)["notifications"] == []
+
+
+def test_explicit_self_mention_creates_reminder_without_watcher_noise(context):
+    views, collaboration, _workspaces, owner, _teammate, workspace, _team, issue = context
+
+    collaboration.watch(owner, workspace.id, issue.key)
+    collaboration.create_comment(owner, workspace.id, issue.key, "A normal watched comment")
+    assert views.inbox(owner, workspace.id, unread_only=False)["notifications"] == []
+
+    collaboration.create_comment(owner, workspace.id, issue.key, "@Owner remember this", [owner.id])
+    inbox = views.inbox(owner, workspace.id, unread_only=False)
+
+    assert inbox["unread_count"] == 1
+    assert inbox["notifications"][0].kind == "self_mention"
+
+
+def test_mentions_reject_users_outside_the_team(context):
+    _views, collaboration, workspaces, owner, teammate, workspace, team, issue = context
+    workspaces.delete_team_member(owner, workspace.id, team.id, teammate.id)
+
+    with pytest.raises(CollaborationValidationError, match="Mentioned users must be active members"):
+        collaboration.create_comment(owner, workspace.id, issue.key, "@Teammate", [teammate.id])

@@ -86,8 +86,9 @@ class ViewNotificationService:
             self.repository.refresh(notification)
         return notification
 
-    def enqueue_many(self, *, recipients: set[int], workspace_id: str, issue_id: str, event_id: str, actor_user_id: int, kind: str, payload: dict):
-        for recipient in sorted(recipients - {actor_user_id}):
+    def enqueue_many(self, *, recipients: set[int], workspace_id: str, issue_id: str, event_id: str, actor_user_id: int, kind: str, payload: dict, include_actor: bool = False):
+        effective_recipients = recipients if include_actor else recipients - {actor_user_id}
+        for recipient in sorted(effective_recipients):
             self.repository.add(Notification(
                 id=str(uuid.uuid4()), recipient_user_id=recipient, workspace_id=workspace_id,
                 issue_id=issue_id, issue_event_id=event_id, actor_user_id=actor_user_id,

@@ -150,7 +150,7 @@ Notification creation belongs in the same transaction as the issue/comment event
 
 ### Implemented M6 behavior
 
-Saved views persist the normalized M4 filter grammar as JSON, never SQL, and re-run team authorization every time they are listed or executed. Private views are owner-only; team and workspace visibility only affect discoverability and never broaden underlying issue access. Inbox rows are created in the same database transaction as collaboration events for mentioned users and issue watchers. Listing or marking a notification rechecks current workspace/team access, so removing a member immediately hides old issue content without deleting authored history. The Web app exposes My Issues, Saved Views, and Inbox with unread state and mark-read navigation.
+Saved views persist the normalized M4 filter grammar as JSON, never SQL, and re-run team authorization every time they are listed or executed. Private views are owner-only; team and workspace visibility only affect discoverability and never broaden underlying issue access. Inbox rows are created in the same database transaction as collaboration events for mentioned users and issue watchers. Mentions arrive as structured, team-validated user IDs from the autocomplete UI. Ordinary watcher activity excludes the actor to prevent noise, while an explicit self-mention creates a `self_mention` reminder. Listing or marking a notification rechecks current workspace/team access, so removing a member immediately hides old issue content without deleting authored history. The Web app exposes My Issues, Saved Views, and Inbox with unread state and mark-read navigation.
 
 ### Implemented M4 query encoding
 

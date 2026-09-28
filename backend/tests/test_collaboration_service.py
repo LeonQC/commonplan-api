@@ -43,7 +43,7 @@ def context():
 def test_comment_mentions_watchers_and_sub_issues(context):
     db, collaboration, _workspaces, owner, teammate, _observer, workspace, _team, parent = context
 
-    comment = collaboration.create_comment(teammate, workspace.id, parent.key, "Please review @owner@example.com")
+    comment = collaboration.create_comment(teammate, workspace.id, parent.key, "Please review @Owner", [owner.id])
     state = collaboration.collaboration(teammate, workspace.id, parent.key)
     child, _labels = collaboration.create_sub_issue(teammate, workspace.id, parent.key, {"title": "Child", "label_ids": []})
 
