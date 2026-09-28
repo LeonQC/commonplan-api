@@ -17,15 +17,15 @@ def _error(exc):
     return HTTPException(status_code=422, detail=str(exc))
 
 
-@router.post("/workspaces/{workspace_id}/issues/{key}/collaboration/comments", response_model=IssueActivityRead, status_code=201)
+@router.post("/workspaces/{workspace_id}/issues/{key}/comments", response_model=IssueActivityRead, status_code=201)
 def create_comment(workspace_id: str, key: str, payload: IssueCommentCreate, current_user: CurrentUser, service: CollaborationServiceDep):
-    try: return service.create_comment(current_user, workspace_id, key, payload.body)
+    try: return service.create_comment(current_user, workspace_id, key, payload.body, payload.mentioned_user_ids)
     except Exception as exc: raise _error(exc) from exc
 
 
 @router.patch("/workspaces/{workspace_id}/issues/{key}/comments/{comment_id}", response_model=IssueActivityRead)
 def update_comment(workspace_id: str, key: str, comment_id: str, payload: IssueCommentPatch, current_user: CurrentUser, service: CollaborationServiceDep):
-    try: return service.update_comment(current_user, workspace_id, key, comment_id, payload.body)
+    try: return service.update_comment(current_user, workspace_id, key, comment_id, payload.body, payload.mentioned_user_ids)
     except Exception as exc: raise _error(exc) from exc
 
 

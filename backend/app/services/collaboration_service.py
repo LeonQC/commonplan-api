@@ -9,6 +9,7 @@ from app.repositories.collaboration_repository import CollaborationRepository, C
 from app.services.issue_service import IssueService, IssueServiceDep
 from app.services.resource_policy import ResourceForbidden, ResourceNotFound, ResourcePolicy
 from app.services.workspace_service import WorkspaceService, WorkspaceServiceDep
+from app.services.view_notification_service import ViewNotificationService, ViewNotificationServiceDep
 
 
 class CollaborationValidationError(Exception): pass
@@ -20,30 +21,36 @@ class CollaborationService:
         repository: CollaborationRepository,
         workspaces: WorkspaceService,
         issues: IssueService,
+        notifications: ViewNotificationService | None = None,
     ):
         self.repository = repository
         self.workspaces = workspaces
         self.issues = issues
+        self.notifications = notifications
         self.policy = ResourcePolicy(workspaces)
 
-    def create_comment(self, user: User, workspace_id: str, key: str, body: str):
+    def create_comment(self, user: User, workspace_id: str, key: str, body: str, mentioned_user_ids: list[int] | None = None):
         issue = self._issue(user, workspace_id, key)
         normalized = body.strip()
         if not normalized:
             raise CollaborationValidationError("Comment cannot be empty")
         comment = IssueComment(id=str(uuid.uuid4()), issue_id=issue.id, author_user_id=user.id, body=normalized)
         self.repository.add(comment)
-        mentioned = self._mentioned_users(user, workspace_id, issue.team_id, normalized)
+        # CommentMention has no ORM relationship to advertise insert ordering, so
+        # persist the parent row before adding its foreign-key children.
+        self.repository.flush()
+        mentioned = self._mentioned_users(user, workspace_id, issue.team_id, mentioned_user_ids or [])
         self.repository.replace_mentions(comment.id, mentioned)
         self._ensure_watcher(issue.id, user.id, "participated")
         for user_id in mentioned:
             self._ensure_watcher(issue.id, user_id, "mentioned")
-        self._event(issue.id, user.id, "comment.created", {"comment_id": comment.id, "mentioned_user_ids": sorted(mentioned)})
+        event_id = self._event(issue.id, user.id, "comment.created", {"comment_id": comment.id, "mentioned_user_ids": sorted(mentioned)})
+        self._notify(issue, event_id, user.id, "comment", mentioned, {"issue_key": issue.key, "comment_id": comment.id})
         self.repository.commit()
         self.repository.refresh(comment)
         return self._comment_activity(comment)
 
-    def update_comment(self, user: User, workspace_id: str, key: str, comment_id: str, body: str):
+    def update_comment(self, user: User, workspace_id: str, key: str, comment_id: str, body: str, mentioned_user_ids: list[int] | None = None):
         issue = self._issue(user, workspace_id, key)
         comment = self.repository.comment(comment_id)
         if comment is None or comment.issue_id != issue.id or comment.deleted_at is not None:
@@ -54,11 +61,12 @@ class CollaborationService:
             raise CollaborationValidationError("Comment cannot be empty")
         comment.body = normalized
         comment.edited_at = datetime.now(timezone.utc)
-        mentioned = self._mentioned_users(user, workspace_id, issue.team_id, normalized)
+        mentioned = self._mentioned_users(user, workspace_id, issue.team_id, mentioned_user_ids or [])
         self.repository.replace_mentions(comment.id, mentioned)
         for user_id in mentioned:
             self._ensure_watcher(issue.id, user_id, "mentioned")
-        self._event(issue.id, user.id, "comment.updated", {"comment_id": comment.id, "mentioned_user_ids": sorted(mentioned)})
+        event_id = self._event(issue.id, user.id, "comment.updated", {"comment_id": comment.id, "mentioned_user_ids": sorted(mentioned)})
+        self._notify(issue, event_id, user.id, "comment_updated", mentioned, {"issue_key": issue.key, "comment_id": comment.id})
         self.repository.commit()
         self.repository.refresh(comment)
         return self._comment_activity(comment)
@@ -113,20 +121,40 @@ class CollaborationService:
         self.policy.require_issue_access(user, workspace_id, issue)
         return issue
 
-    def _mentioned_users(self, user, workspace_id, team_id, body):
+    def _mentioned_users(self, user, workspace_id, team_id, mentioned_user_ids):
         members = self.workspaces.team_members(user, workspace_id, team_id)
-        lowered = body.lower()
-        return {member.id for member, _membership in members if f"@{member.email.lower()}" in lowered and member.id != user.id}
+        member_ids = {member.id for member, _membership in members}
+        mentioned = set(mentioned_user_ids)
+        if not mentioned.issubset(member_ids):
+            raise CollaborationValidationError("Mentioned users must be active members of this team")
+        return mentioned
 
     def _ensure_watcher(self, issue_id, user_id, reason):
         if self.repository.watcher(issue_id, user_id) is None:
             self.repository.add(IssueWatcher(issue_id=issue_id, user_id=user_id, reason=reason))
 
     def _event(self, issue_id, actor_user_id, event_type, changes):
+        event_id = str(uuid.uuid4())
         self.repository.add(IssueEvent(
-            id=str(uuid.uuid4()), issue_id=issue_id, actor_user_id=actor_user_id,
+            id=event_id, issue_id=issue_id, actor_user_id=actor_user_id,
             event_type=event_type, changes={"schema_version": 1, **changes},
         ))
+        return event_id
+
+    def _notify(self, issue, event_id, actor_user_id, kind, mentioned, payload):
+        if self.notifications is None:
+            return
+        recipients = (self.repository.watcher_user_ids(issue.id) | set(mentioned)) - {actor_user_id}
+        self.notifications.enqueue_many(
+            recipients=recipients, workspace_id=issue.workspace_id, issue_id=issue.id,
+            event_id=event_id, actor_user_id=actor_user_id, kind=kind, payload=payload,
+        )
+        if actor_user_id in mentioned:
+            self.notifications.enqueue_many(
+                recipients={actor_user_id}, workspace_id=issue.workspace_id, issue_id=issue.id,
+                event_id=event_id, actor_user_id=actor_user_id, kind="self_mention", payload=payload,
+                include_actor=True,
+            )
 
     def _comment_activity(self, comment):
         return {
@@ -140,8 +168,9 @@ def get_collaboration_service(
     repository: CollaborationRepositoryDep,
     workspaces: WorkspaceServiceDep,
     issues: IssueServiceDep,
+    notifications: ViewNotificationServiceDep,
 ) -> CollaborationService:
-    return CollaborationService(repository, workspaces, issues)
+    return CollaborationService(repository, workspaces, issues, notifications)
 
 
 CollaborationServiceDep = Annotated[CollaborationService, Depends(get_collaboration_service)]

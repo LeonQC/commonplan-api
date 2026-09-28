@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 
 from app.database import Base
@@ -18,6 +18,7 @@ from app.services.workspace_service import WorkspaceService
 @pytest.fixture
 def context():
     engine = create_engine("sqlite://")
+    event.listen(engine, "connect", lambda connection, _record: connection.execute("PRAGMA foreign_keys=ON"))
     Base.metadata.create_all(engine)
     with Session(engine) as db:
         now = datetime.now(timezone.utc)
@@ -43,7 +44,7 @@ def context():
 def test_comment_mentions_watchers_and_sub_issues(context):
     db, collaboration, _workspaces, owner, teammate, _observer, workspace, _team, parent = context
 
-    comment = collaboration.create_comment(teammate, workspace.id, parent.key, "Please review @owner@example.com")
+    comment = collaboration.create_comment(teammate, workspace.id, parent.key, "Please review @Owner", [owner.id])
     state = collaboration.collaboration(teammate, workspace.id, parent.key)
     child, _labels = collaboration.create_sub_issue(teammate, workspace.id, parent.key, {"title": "Child", "label_ids": []})
 

@@ -238,6 +238,7 @@ class IssueRead(BaseModel):
 
 class IssueCommentCreate(BaseModel):
     body: str = Field(min_length=1, max_length=20000)
+    mentioned_user_ids: list[int] = Field(default_factory=list, max_length=100)
 
     @field_validator("body")
     @classmethod
@@ -246,6 +247,11 @@ class IssueCommentCreate(BaseModel):
         if not normalized:
             raise ValueError("Comment cannot be empty")
         return normalized
+
+    @field_validator("mentioned_user_ids")
+    @classmethod
+    def unique_mentions(cls, value: list[int]) -> list[int]:
+        return list(dict.fromkeys(value))
 
 
 class IssueCommentPatch(IssueCommentCreate):
@@ -263,6 +269,60 @@ class IssueCollaborationRead(BaseModel):
     watching: bool
     watchers: list[IssueWatcherRead]
     sub_issues: list[IssueRead]
+
+
+class SavedViewCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    team_id: str | None = None
+    visibility: str = "private"
+    filter_spec: dict = Field(default_factory=dict)
+    group_by: str | None = None
+    sort_by: str = "updated_at"
+    sort_direction: str = "desc"
+
+
+class SavedViewPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    visibility: str | None = None
+    filter_spec: dict | None = None
+    group_by: str | None = None
+    sort_by: str | None = None
+    sort_direction: str | None = None
+
+
+class SavedViewRead(BaseModel):
+    id: str
+    workspace_id: str
+    team_id: str | None
+    owner_user_id: int
+    name: str
+    visibility: str
+    filter_version: int
+    filter_spec: dict
+    group_by: str | None
+    sort_by: str
+    sort_direction: str
+    created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class NotificationRead(BaseModel):
+    id: str
+    workspace_id: str
+    issue_id: str | None
+    issue_event_id: str | None
+    actor_user_id: int | None
+    kind: str
+    payload: dict
+    created_at: datetime
+    read_at: datetime | None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class InboxRead(BaseModel):
+    unread_count: int
+    notifications: list[NotificationRead]
 
 
 class IssueActivityRead(BaseModel):
