@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database import DbSession
-from app.models import Cycle, Issue, IssueComment, IssueEvent, IssueLabel, Label, Team, User, WorkflowState
+from app.models import Cycle, Issue, IssueComment, IssueEvent, IssueLabel, Label, Project, ProjectMilestone, Team, User, WorkflowState
 
 
 class IssueRepository(Protocol):
@@ -18,9 +18,16 @@ class IssueRepository(Protocol):
     def cycle(self, cycle_id: str) -> Cycle | None: ...
     def labels(self, team_id: str) -> list[Label]: ...
     def label(self, label_id: str) -> Label | None: ...
+    def project(self, project_id: str) -> Project | None: ...
+    def milestone(self, milestone_id: str) -> ProjectMilestone | None: ...
     def issue(self, workspace_id: str, key: str, *, for_update: bool = False) -> Issue | None: ...
     def issues(self, team_id: str, **filters) -> list[Issue]: ...
+    def recently_updated_issues(self, team_id: str, *, include_archived: bool = False) -> list[Issue]: ...
     def issue_labels(self, issue_id: str) -> list[Label]: ...
+    def issue_label_pairs(self, issue_ids: list[str]) -> list[tuple[str, str]]: ...
+    def events_for_issues(self, issue_ids: list[str], *, event_type: str | None = None, limit: int | None = None) -> list[IssueEvent]: ...
+    def comments_for_issues(self, issue_ids: list[str], *, limit: int | None = None) -> list[IssueComment]: ...
+    def users(self, user_ids: set[int]) -> list[User]: ...
     def replace_labels(self, issue_id: str, label_ids: list[str]) -> None: ...
     def comments(self, issue_id: str) -> list[IssueComment]: ...
     def events(self, issue_id: str) -> list[IssueEvent]: ...
@@ -58,6 +65,12 @@ class SqlAlchemyIssueRepository:
     def label(self, label_id: str) -> Label | None:
         return self.db.get(Label, label_id)
 
+    def project(self, project_id: str) -> Project | None:
+        return self.db.get(Project, project_id)
+
+    def milestone(self, milestone_id: str) -> ProjectMilestone | None:
+        return self.db.get(ProjectMilestone, milestone_id)
+
     def issue(self, workspace_id: str, key: str, *, for_update: bool = False) -> Issue | None:
         stmt = select(Issue).where(Issue.workspace_id == workspace_id, Issue.key == key)
         if for_update:
@@ -70,15 +83,64 @@ class SqlAlchemyIssueRepository:
             stmt = stmt.where(Issue.workflow_state_id == filters["workflow_state_id"])
         if filters.get("cycle_id"):
             stmt = stmt.where(Issue.cycle_id == filters["cycle_id"])
+        if filters.get("project_id"):
+            stmt = stmt.where(Issue.project_id == filters["project_id"])
         if filters.get("priority") is not None:
             stmt = stmt.where(Issue.priority == filters["priority"])
         if filters.get("assignee_user_id"):
             stmt = stmt.where(Issue.assignee_user_id == filters["assignee_user_id"])
         return list(self.db.scalars(stmt.order_by(Issue.position, Issue.created_at, Issue.id)))
 
+    def recently_updated_issues(self, team_id: str, *, include_archived: bool = False) -> list[Issue]:
+        stmt = select(Issue).where(Issue.team_id == team_id)
+        if not include_archived:
+            stmt = stmt.where(Issue.archived_at.is_(None))
+        return list(self.db.scalars(stmt.order_by(Issue.updated_at.desc(), Issue.id)))
+
     def issue_labels(self, issue_id: str) -> list[Label]:
         stmt = select(Label).join(IssueLabel, IssueLabel.label_id == Label.id).where(IssueLabel.issue_id == issue_id).order_by(Label.name)
         return list(self.db.scalars(stmt))
+
+    def issue_label_pairs(self, issue_ids: list[str]) -> list[tuple[str, str]]:
+        if not issue_ids:
+            return []
+        return list(self.db.execute(
+            select(IssueLabel.issue_id, IssueLabel.label_id).where(IssueLabel.issue_id.in_(issue_ids))
+        ).all())
+
+    def events_for_issues(
+        self,
+        issue_ids: list[str],
+        *,
+        event_type: str | None = None,
+        limit: int | None = None,
+    ) -> list[IssueEvent]:
+        if not issue_ids:
+            return []
+        stmt = select(IssueEvent).where(IssueEvent.issue_id.in_(issue_ids))
+        if event_type is not None:
+            stmt = stmt.where(IssueEvent.event_type == event_type)
+        stmt = stmt.order_by(IssueEvent.created_at.desc(), IssueEvent.id.desc())
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        return list(self.db.scalars(stmt))
+
+    def comments_for_issues(self, issue_ids: list[str], *, limit: int | None = None) -> list[IssueComment]:
+        if not issue_ids:
+            return []
+        stmt = (
+            select(IssueComment)
+            .where(IssueComment.issue_id.in_(issue_ids), IssueComment.deleted_at.is_(None))
+            .order_by(IssueComment.created_at.desc(), IssueComment.id.desc())
+        )
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        return list(self.db.scalars(stmt))
+
+    def users(self, user_ids: set[int]) -> list[User]:
+        if not user_ids:
+            return []
+        return list(self.db.scalars(select(User).where(User.id.in_(user_ids))))
 
     def replace_labels(self, issue_id: str, label_ids: list[str]) -> None:
         self.db.query(IssueLabel).filter(IssueLabel.issue_id == issue_id).delete(synchronize_session=False)

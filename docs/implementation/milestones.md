@@ -97,6 +97,8 @@ Exit demo:
 
 ## M3 — Projects
 
+**Status:** implemented locally on `codex/m3-projects`; automated validation is complete and browser acceptance remains before publication.
+
 Scope:
 
 - Add `projects`, `project_objectives`, `project_updates`, and `project_milestones`.
@@ -112,6 +114,8 @@ Exit demo:
 ## M4 — Team Summary and analytics
 
 The canonical product/API contract is [04 — Team Summary, saved views, search, and inbox](../data-model/04-views-notifications.md).
+
+**Status:** implemented locally on `codex/m4-team-summary`; automated validation and the Team A/filter URL/Team B empty-state browser walkthrough are complete. Publication remains pending review.
 
 Scope:
 
