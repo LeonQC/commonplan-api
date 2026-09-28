@@ -5,7 +5,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.database import DbSession
-from app.models import RefreshToken
+from app.models import IdentityUser, LoginCode, RefreshToken
 
 
 class RefreshTokenRepository(Protocol):
@@ -16,6 +16,14 @@ class RefreshTokenRepository(Protocol):
     def revoke_family(self, family_id: str, revoked_at) -> None: ...
 
     def revoke_user_tokens(self, user_id: str, revoked_at) -> None: ...
+
+    def user(self, user_id: str) -> IdentityUser | None: ...
+
+    def add_login_code(self, code: LoginCode) -> None: ...
+
+    def login_code_for_update(self, code_hash: str) -> LoginCode | None: ...
+
+    def save_changes(self) -> None: ...
 
 
 class SqlAlchemyRefreshTokenRepository:
@@ -51,6 +59,20 @@ class SqlAlchemyRefreshTokenRepository:
             )
             .values(revoked_at=revoked_at)
         )
+
+    def user(self, user_id: str) -> IdentityUser | None:
+        return self.db.get(IdentityUser, user_id)
+
+    def add_login_code(self, code: LoginCode) -> None:
+        self.db.add(code)
+
+    def login_code_for_update(self, code_hash: str) -> LoginCode | None:
+        return self.db.scalar(
+            select(LoginCode).where(LoginCode.code_hash == code_hash).with_for_update()
+        )
+
+    def save_changes(self) -> None:
+        self.db.commit()
 
 
 def get_refresh_token_repository(db: DbSession) -> RefreshTokenRepository:

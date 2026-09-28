@@ -1,14 +1,12 @@
 from fastapi import APIRouter, HTTPException
 
 from app.auth import CurrentUser
-from app.issue_routes import _issue_read
-from app.repositories.issue_repository import SqlAlchemyIssueRepository
+from app.presenters import issue_read
 from app.schemas import (
     ProjectCreate, ProjectMilestoneCreate, ProjectMilestonePatch, ProjectMilestoneRead,
     ProjectObjectiveCreate, ProjectObjectivePatch, ProjectObjectiveRead, ProjectPatch,
     ProjectRead, ProjectStatusUpdateCreate, ProjectStatusUpdateRead,
 )
-from app.services.issue_service import IssueService
 from app.services.project_service import (
     ProjectConflict, ProjectForbidden, ProjectNotFound, ProjectServiceDep, ProjectValidationError,
 )
@@ -50,7 +48,6 @@ def _update_read(snapshot) -> ProjectStatusUpdateRead:
 
 def _project_read(service, snapshot) -> ProjectRead:
     row = snapshot["project"]
-    issue_service = IssueService(SqlAlchemyIssueRepository(service.repository.db), service.workspaces)
     return ProjectRead(
         id=row.id, team_id=row.team_id, name=row.name, slug=row.slug,
         summary=row.summary, description=row.description, status=row.status,
@@ -61,8 +58,8 @@ def _project_read(service, snapshot) -> ProjectRead:
         milestones=[_milestone_read(item) for item in snapshot["milestones"]],
         updates=[_update_read(item) for item in snapshot["updates"]],
         linked_issues=[
-            _issue_read(issue_service, issue, issue_service.repository.issue_labels(issue.id))
-            for issue in snapshot["issues"]
+            issue_read(issue, state, labels)
+            for issue, state, labels in snapshot["issue_details"]
         ],
         created_at=row.created_at, updated_at=row.updated_at,
     )

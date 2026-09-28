@@ -3,9 +3,8 @@ import uuid
 from typing import Annotated
 
 from fastapi import Depends
-from sqlalchemy.exc import IntegrityError
-
 from app.models import Project, ProjectMilestone, ProjectObjective, ProjectUpdate, User
+from app.repositories.errors import RepositoryConflictError
 from app.repositories.project_repository import ProjectRepository, ProjectRepositoryDep
 from app.services.workspace_service import WorkspaceService, WorkspaceServiceDep
 
@@ -143,6 +142,10 @@ class ProjectService:
             "milestones": [self.milestone_snapshot(row, issues) for row in self.repository.milestones(project.id)],
             "updates": [self.update_snapshot(row) for row in self.repository.updates(project.id)],
             "issues": issues,
+            "issue_details": [
+                (issue, state, self.repository.issue_labels(issue.id))
+                for issue, state in issue_states
+            ],
         }
 
     def milestone_snapshot(self, milestone: ProjectMilestone, issues=None):
@@ -167,7 +170,7 @@ class ProjectService:
         if values.get("status") is not None and values["status"] not in PROJECT_STATUSES:
             raise ProjectValidationError("Project status is invalid")
         lead = values.get("lead_user_id")
-        if lead is not None and self.workspaces.repository.team_membership(team_id, lead) is None:
+        if lead is not None and not self.workspaces.is_team_member(team_id, lead):
             raise ProjectValidationError("Project lead must be an active team member")
 
     @staticmethod
@@ -190,9 +193,8 @@ class ProjectService:
 
     def _commit(self):
         try:
-            self.repository.commit()
-        except IntegrityError as exc:
-            self.repository.db.rollback()
+            self.repository.save_changes()
+        except RepositoryConflictError as exc:
             raise ProjectConflict("Project value already exists") from exc
 
 
