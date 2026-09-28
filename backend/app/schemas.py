@@ -325,6 +325,43 @@ class InboxRead(BaseModel):
     notifications: list[NotificationRead]
 
 
+class GitHubPullRequestRead(BaseModel):
+    id: str
+    github_repo_id: int
+    github_repo_full_name: str
+    pr_number: int
+    title: str
+    html_url: str
+    state: str
+    is_draft: bool
+    merged_at: datetime | None
+    github_updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class GitHubDeliveryRead(BaseModel):
+    delivery_id: str
+    github_repo_id: int | None
+    event_type: str
+    action: str | None
+    status: str
+    received_at: datetime
+    processed_at: datetime | None
+    error_code: str | None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class GitHubIntegrationHealthRead(BaseModel):
+    configured: bool
+    owner_login: str | None
+    owner_id: int | None
+    hook_id: int | None
+    event: str
+    webhook_path: str
+    last_delivery: GitHubDeliveryRead | None
+    delivery_counts: dict[str, int]
+
+
 class IssueActivityRead(BaseModel):
     id: str
     kind: str

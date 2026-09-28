@@ -372,3 +372,51 @@ class Notification(Base):
     dedupe_key: Mapped[str] = mapped_column(String(160), unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class GitHubPullRequest(Base):
+    __tablename__ = "github_pull_requests"
+    __table_args__ = (UniqueConstraint("github_repo_id", "pr_number"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    github_repo_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    github_repo_full_name: Mapped[str] = mapped_column(String(255))
+    pr_number: Mapped[int] = mapped_column()
+    title: Mapped[str] = mapped_column(Text)
+    html_url: Mapped[str] = mapped_column(Text)
+    state: Mapped[str] = mapped_column(String(16))
+    is_draft: Mapped[bool] = mapped_column(Boolean, default=False)
+    merged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    github_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class IssuePullRequestLink(Base):
+    __tablename__ = "issue_pr_links"
+
+    issue_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("issues.id", ondelete="CASCADE"), primary_key=True
+    )
+    pull_request_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("github_pull_requests.id", ondelete="CASCADE"), primary_key=True
+    )
+    source: Mapped[str] = mapped_column(String(24), default="title_key")
+    linked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    detached_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class GitHubWebhookDelivery(Base):
+    __tablename__ = "github_webhook_deliveries"
+
+    delivery_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    github_repo_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    event_type: Mapped[str] = mapped_column(String(40))
+    action: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    status: Mapped[str] = mapped_column(String(16))
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
