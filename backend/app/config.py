@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
     cookie_same_site: Literal["lax", "strict", "none"] = "lax"
     session_max_age_seconds: int = 60 * 60 * 24 * 7
+    github_webhook_secret: str = ""
+    github_allowed_owner_id: int | None = None
+    github_allowed_owner_login: str = ""
+    github_workspace_id: str = ""
+    github_hook_id: int | None = None
 
     @model_validator(mode="after")
     def validate_cookie_settings(self) -> "Settings":
@@ -29,7 +34,7 @@ class Settings(BaseSettings):
             raise ValueError("SameSite=None cookies require COOKIE_SECURE=true")
         return self
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", env_ignore_empty=True)
 
 
 settings = Settings()

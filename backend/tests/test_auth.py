@@ -356,7 +356,10 @@ def test_openapi_fails_closed_for_every_business_operation():
         for method, operation in path_item.items():
             if method not in {"get", "post", "put", "patch", "delete"}:
                 continue
-            if path == "/health" or path.startswith("/auth/"):
+            # The inbound GitHub endpoint is the sole non-user-JWT product
+            # operation. It authenticates the raw request with GitHub's HMAC
+            # signature, owner/hook allowlists, and delivery-id deduplication.
+            if path == "/health" or path.startswith("/auth/") or path == "/webhooks/github":
                 assert operation.get("security") in (None, [])
             else:
                 assert operation.get("security") == [{"AccessToken": []}], (

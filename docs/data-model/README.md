@@ -70,7 +70,7 @@ Paths in this matrix omit the `/api/v1` prefix unless explicitly shown; the GitH
 2. A project belongs to **exactly one team**. A project may span several cycles; issues, not projects, are assigned to a cycle. The “Cycle 3” project detail is a derived current/most-relevant cycle, not a permanent `projects.cycle_id`.
 3. Each team has a workspace-unique issue prefix such as `KEY`. Its prefix stops changing after the first issue is created. `KEY-31` remains immutable even if team display name changes.
 4. Team members can read that team's projects and issues. Workspace admins can administer all teams. Private projects and guests are outside P0.
-5. GitHub integration is a signed webhook configured on GitHub, not GitHub OAuth or an installed GitHub App. A single configured GitHub organization maps to one workspace in P1; there is no repository/project mapping.
+5. GitHub integration is a signed webhook configured on GitHub, not GitHub OAuth or an installed GitHub App. A single configured GitHub owner (organization or personal account) maps to one workspace in P1; there is no repository/project mapping.
 
 If cross-team projects, guest access, or one GitHub organization shared by multiple workspaces are required, the corresponding module needs an explicit policy revision before migrations.
 
