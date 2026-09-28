@@ -67,6 +67,13 @@ pnpm dlx smee-client \
 
 The client should report that the public channel is forwarding to `http://localhost:8000/webhooks/github`. Stopping the process stops local delivery; it does not remove the GitHub webhook.
 
+Do not commit a Smee channel URL. It is temporary public development infrastructure. Recover the currently configured URL from GitHub when needed:
+
+```bash
+gh api repos/wangd606/commonplan-api/hooks \
+  --jq '.[] | select(.active and (.events | index("pull_request"))) | {id, url: .config.url}'
+```
+
 ## 4. Add the GitHub webhook
 
 Add the webhook to both fork repositories that should participate:
@@ -93,9 +100,59 @@ GitHub sends a `ping` immediately. The CommonPlan endpoint also accepts the rele
 
 If the UI does not update, verify the delivery in three places in order: GitHub Recent Deliveries, the smee channel page/client output, and CommonPlan's Applications page. Signature failures usually mean the two secret values differ or a proxy changed the raw body.
 
+## Daily local runbook
+
+The GitHub webhook remains configured on GitHub, but local forwarding only works while the API and Smee client are running.
+
+1. Start the CommonPlan stack and apply pending migrations:
+
+   ```bash
+   docker compose up -d --build backend-migrate backend
+   curl --fail http://localhost:8000/health
+   ```
+
+2. Recover the channel URL with the `gh api` command above, then start the forwarding daemon in a dedicated terminal:
+
+   ```bash
+   pnpm dlx smee-client \
+     --url https://smee.io/YOUR_CHANNEL \
+     --target http://localhost:8000/webhooks/github
+   ```
+
+3. Confirm that both fork repositories still have active pull-request webhooks:
+
+   ```bash
+   for repo in commonplan-api commonplan-web; do
+     gh api "repos/wangd606/$repo/hooks" \
+       --jq '.[] | {id, active, events, url: .config.url}'
+   done
+   ```
+
+4. Confirm CommonPlan durably processed recent deliveries:
+
+   ```bash
+   docker exec project-zhitong-1-db-1 \
+     psql -U zhitong -d zhitong \
+     -c 'SELECT event_type, status, received_at, error_code FROM github_webhook_deliveries ORDER BY received_at DESC LIMIT 10;'
+   ```
+
+After a laptop restart, repeat steps 1 and 2. A stopped Smee client does not delete events from GitHub; use **Recent Deliveries → Redeliver** after the daemon is back online.
+
+## Reference configuration
+
+- Allowed GitHub owner: `wangd606` (`297650267`)
+- Webhook repositories: `wangd606/commonplan-api`, `wangd606/commonplan-web`
+- Event subscription: `pull_request` only
+- Local target: `http://localhost:8000/webhooks/github`
+- CommonPlan scope: one configured workspace through `GITHUB_WORKSPACE_ID`
+- Link rule: an exact existing issue key in the PR title; no repository/project mapping
+
+The secret and local workspace UUID belong in the untracked `.env` file. Do not put either value in this document, a PR description, or GitHub issue.
+
 ## Security and lifecycle
 
 - The endpoint is intentionally outside user JWT authentication. It authenticates the sender with the HMAC signature, numeric owner allowlist, optional hook ID, and unique delivery ID.
 - The raw webhook payload and secret are not stored. CommonPlan stores a minimal PR snapshot, active/detached issue links, and delivery metadata.
 - Only future deliveries are linked. M7 does not use a GitHub token to backfill existing PRs.
 - Rotate the secret in both `.env` and GitHub webhook settings together, then restart the API and redeliver a test event.
+- When changing Smee channels, update the Payload URL on both repository webhooks before stopping the old client.
