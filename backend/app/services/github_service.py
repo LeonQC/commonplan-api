@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import Depends
-from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
 from app.models import (
@@ -88,29 +87,25 @@ class GitHubIntegrationService:
             status="pending",
             received_at=now,
         )
-        self.repository.add(delivery)
-        try:
-            self.repository.flush()
-        except IntegrityError:
-            self.repository.rollback()
-            existing_delivery = self.repository.delivery(normalized_delivery_id)
+        duplicate_status = self.repository.reserve_delivery(delivery)
+        if duplicate_status is not None:
             return {
                 "accepted": True,
                 "duplicate": True,
-                "status": existing_delivery.status if existing_delivery else "processed",
+                "status": duplicate_status,
             }
 
         if event == "ping":
             delivery.status = "processed"
             delivery.processed_at = now
-            self.repository.commit()
+            self.repository.save_changes()
             return {"accepted": True, "duplicate": False, "status": "processed"}
 
         if event != "pull_request" or action not in self.SUPPORTED_ACTIONS:
             delivery.status = "ignored"
             delivery.error_code = "unsupported_event"
             delivery.processed_at = now
-            self.repository.commit()
+            self.repository.save_changes()
             return {"accepted": True, "duplicate": False, "status": "ignored"}
 
         try:
@@ -119,12 +114,12 @@ class GitHubIntegrationService:
             delivery.status = "failed"
             delivery.error_code = "invalid_payload"
             delivery.processed_at = now
-            self.repository.commit()
+            self.repository.save_changes()
             raise exc
 
         delivery.status = "processed"
         delivery.processed_at = now
-        self.repository.commit()
+        self.repository.save_changes()
         return {
             "accepted": True,
             "duplicate": False,
@@ -194,7 +189,6 @@ class GitHubIntegrationService:
                 last_received_at=now,
             )
             self.repository.add(record)
-            self.repository.flush()
         else:
             record.github_repo_full_name = repo_name
             record.title = title

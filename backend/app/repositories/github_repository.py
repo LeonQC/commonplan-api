@@ -2,6 +2,7 @@ from typing import Annotated, Protocol
 
 from fastapi import Depends
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import DbSession
@@ -13,6 +14,7 @@ from app.models import (
     Team,
     Workspace,
 )
+from app.repositories.errors import RepositoryConflictError
 
 
 class GitHubRepository(Protocol):
@@ -26,9 +28,8 @@ class GitHubRepository(Protocol):
     def links(self, pull_request_id: str) -> list[IssuePullRequestLink]: ...
     def linked_pull_requests(self, issue_id: str) -> list[GitHubPullRequest]: ...
     def add(self, record: object) -> None: ...
-    def flush(self) -> None: ...
-    def commit(self) -> None: ...
-    def rollback(self) -> None: ...
+    def reserve_delivery(self, delivery: GitHubWebhookDelivery) -> str | None: ...
+    def save_changes(self) -> None: ...
 
 
 class SqlAlchemyGitHubRepository:
@@ -106,14 +107,22 @@ class SqlAlchemyGitHubRepository:
     def add(self, record: object) -> None:
         self.db.add(record)
 
-    def flush(self) -> None:
-        self.db.flush()
+    def reserve_delivery(self, delivery: GitHubWebhookDelivery) -> str | None:
+        self.db.add(delivery)
+        try:
+            self.db.flush()
+        except IntegrityError:
+            self.db.rollback()
+            existing = self.db.get(GitHubWebhookDelivery, delivery.delivery_id)
+            return existing.status if existing is not None else "processed"
+        return None
 
-    def commit(self) -> None:
-        self.db.commit()
-
-    def rollback(self) -> None:
-        self.db.rollback()
+    def save_changes(self) -> None:
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise RepositoryConflictError from exc
 
 
 def get_github_repository(db: DbSession) -> GitHubRepository:
