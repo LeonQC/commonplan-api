@@ -73,6 +73,11 @@ class IssueService:
             team_id, values.get("assignee_user_id"), values.get("cycle_id"),
             values.get("label_ids", []), values.get("project_id"), values.get("milestone_id"),
         )
+        parent_issue_id = values.get("parent_issue_id")
+        if parent_issue_id is not None:
+            parent = self.repository.issue_by_id(parent_issue_id)
+            if parent is None or parent.team_id != team_id:
+                raise IssueValidationError("Parent issue must belong to the selected team")
         number = team.next_issue_number
         team.next_issue_number += 1
         issue = Issue(
@@ -83,6 +88,7 @@ class IssueService:
             creator_user_id=user.id, assignee_user_id=values.get("assignee_user_id"),
             cycle_id=values.get("cycle_id"), due_date=values.get("due_date"),
             project_id=values.get("project_id"), milestone_id=values.get("milestone_id"),
+            parent_issue_id=parent_issue_id,
             position=Decimal(number), version=1,
         )
         self.repository.add(issue)

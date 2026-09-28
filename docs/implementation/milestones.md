@@ -115,6 +115,8 @@ Exit demo:
 
 The canonical product/API contract is [04 — Team Summary, saved views, search, and inbox](../data-model/04-views-notifications.md).
 
+**Status:** implemented locally on `codex/m4-team-summary`; automated validation and the Team A/filter URL/Team B empty-state browser walkthrough are complete. Publication remains pending review.
+
 Scope:
 
 - Implement `GET /api/v1/workspaces/{workspaceId}/teams/{teamId}/summary`.
@@ -135,6 +137,8 @@ Exit demo:
 
 ## M5 — Collaboration expansion
 
+**Status:** implemented locally on `codex/m5-collaboration`; automated API, Web build, and migration round-trip validation are complete. Browser acceptance and stacked publication remain.
+
 Scope:
 
 - Add comment edit/delete policy, mentions, sub-issues, watchers, and notification-producing collaboration events.
@@ -148,6 +152,8 @@ Exit demo:
 - A user cannot infer another team's issue by identifier, comment, event, or notification.
 
 ## M6 — Saved views and Inbox
+
+**Status:** implemented locally on `codex/m6-views-inbox`; API tests, Web build, and migration round-trip validation are complete. Browser acceptance and stacked publication remain.
 
 Scope:
 

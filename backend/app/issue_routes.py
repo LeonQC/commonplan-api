@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.auth import CurrentUser
 from app.schemas import (
-    CycleCreate, CycleRead, IssueActivityRead, IssueCommentCreate, IssueCreate, IssueRead, IssueUpdate,
+    CycleCreate, CycleRead, IssueActivityRead, IssueCreate, IssueRead, IssueUpdate,
     LabelCreate, LabelRead, WorkflowStateRead,
 )
 from app.services.issue_service import (
@@ -35,6 +35,7 @@ def _issue_read(service, issue, labels) -> IssueRead:
         creator_user_id=issue.creator_user_id, assignee_user_id=issue.assignee_user_id,
         cycle_id=issue.cycle_id, due_date=issue.due_date, version=issue.version,
         project_id=issue.project_id, milestone_id=issue.milestone_id,
+        parent_issue_id=issue.parent_issue_id,
         labels=[LabelRead.model_validate(label) for label in labels],
         created_at=issue.created_at, updated_at=issue.updated_at,
     )
@@ -128,24 +129,6 @@ def issue_activity(workspace_id: str, key: str, current_user: CurrentUser, servi
     try:
         return service.activity(current_user, workspace_id, key.upper())
     except (IssueNotFound, IssueForbidden) as exc:
-        raise _error(exc) from exc
-
-
-@router.post(
-    "/workspaces/{workspace_id}/issues/{key}/comments",
-    response_model=IssueActivityRead,
-    status_code=201,
-)
-def create_issue_comment(
-    workspace_id: str,
-    key: str,
-    payload: IssueCommentCreate,
-    current_user: CurrentUser,
-    service: IssueServiceDep,
-):
-    try:
-        return service.add_comment(current_user, workspace_id, key.upper(), payload.body)
-    except (IssueNotFound, IssueForbidden, IssueValidationError) as exc:
         raise _error(exc) from exc
 
 

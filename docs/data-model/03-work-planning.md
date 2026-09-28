@@ -137,6 +137,8 @@ erDiagram
 | `issue_labels` | composite PK `(issue_id, label_id)` | Issue and label must belong to the same team. |
 | `issue_comments` | `id uuid PK`, `issue_id uuid FK`, `author_user_id integer FK`, `body text`, `created_at`, `edited_at NULL`, `deleted_at NULL` | Preserve thread chronology. Soft-delete body if needed while retaining event/audit history. |
 | `issue_events` | `id uuid PK`, `issue_id uuid FK`, `actor_user_id integer NULL FK`, `event_type varchar(64)`, `changes jsonb`, `created_at` | Append-only timeline for status/assignee/priority/project/cycle/comment/PR changes. Event payload is versioned and contains changed field names, not credentials. |
+| `issue_watchers` | `issue_id uuid FK`, `user_id integer FK`, `reason varchar(24)`, `created_at`, composite PK | Explicit watchers plus participants/mentioned members. Access is always rechecked against current team membership. |
+| `comment_mentions` | `comment_id uuid FK`, `user_id integer FK`, `created_at`, composite PK | Materialized mention recipients submitted as structured user IDs and validated against active team membership. Display names are presentation only; editing/deleting a comment replaces or clears mentions transactionally. |
 
 Allocate `issues.number` by locking the owning `teams` row and incrementing `next_issue_number` in the same transaction. Store the resulting key as immutable text. Add indexes for `(team_id, workflow_state_id, position, id)`, `(assignee_user_id, archived_at, due_date)`, `(project_id, archived_at)`, `(cycle_id, archived_at)`, and `(issue_id, created_at)` on activity tables.
 
@@ -150,7 +152,11 @@ Allocate `issues.number` by locking the owning `teams` row and incrementing `nex
 | `GET/POST /api/v1/workspaces/{w}/teams/{t}/projects/{p}/objectives|milestones|updates` | Ordered objectives, milestone management, and authored status updates. |
 | `GET/POST /api/v1/workspaces/{w}/teams/{t}/issues` | Cursor list with status, priority, assignee, project, cycle, label, due-date filters; create returns immutable key. |
 | `GET/PATCH /api/v1/workspaces/{w}/issues/{key}` | Detail and mutation; response includes properties, labels, sub-issues, PR links. `PATCH` requires the last seen `version`; stale writes return 409. |
-| `POST /api/v1/workspaces/{w}/issues/{key}/comments` | Add comment and timeline event transactionally. |
+| `POST /api/v1/workspaces/{w}/issues/{key}/comments` | Add a comment with `body` and `mentioned_user_ids`, then create mentions, watchers, timeline events, and notifications transactionally. |
+| `PATCH/DELETE /api/v1/workspaces/{w}/issues/{key}/comments/{commentId}` | Author, team lead, or workspace admin/owner may edit or soft-delete according to resource policy. |
+| `GET /api/v1/workspaces/{w}/issues/{key}/collaboration` | Current watcher state, authorized watcher display data, and active sub-issues. |
+| `PUT/DELETE /api/v1/workspaces/{w}/issues/{key}/watch` | Idempotently watch or unwatch an issue. |
+| `POST /api/v1/workspaces/{w}/issues/{key}/sub-issues` | Create a same-team child issue through the canonical issue creation transaction. |
 | `GET /api/v1/workspaces/{w}/issues/{key}/activity` | Comments and events in stable chronological order. M2 returns the full stream; introduce cursor pagination before production-scale histories. |
 | `GET /api/v1/me/issues` | My issues across all teams the caller belongs to, with optional workspace filter. |
 
@@ -167,7 +173,7 @@ Issue detail is a first-class page, not a small list-side editor. Its canonical 
 | Properties | Status, priority, assignee, cycle, due date, and labels are editable from the detail page. Options are restricted to the issue's team. |
 | Concurrency | Every mutation sends the last observed `version`. A 409 prompts reload/reconciliation instead of overwriting another user's edit. |
 | Activity | Merge visible comments and append-only issue events into one stable chronological stream ordered by `(created_at, id)`. A comment's audit event may be hidden from the presentation when the comment itself is shown, avoiding duplicate timeline rows. |
-| Comments | Authorized team members can add a non-empty comment. Creation of the comment and its corresponding audit event is one transaction. |
+| Comments | Authorized team members can add a non-empty comment. Typing `@` selects an authorized member through autocomplete; the API receives stable user IDs rather than parsing names or emails. Explicit self-mentions are allowed as reminders, while ordinary activity by a watcher does not notify that same actor. Creation of the comment and its corresponding audit event is one transaction. |
 | Metadata | Show creator, created/updated timestamps, and current version. Future project, milestone, sub-issue, and GitHub PR areas extend this page without changing its canonical route. |
 
 Create and list views may expose a compact subset, but they must link to this full page. Core field support cannot exist only in the API.

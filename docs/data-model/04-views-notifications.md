@@ -147,3 +147,15 @@ The PDF's numbers are illustrative. Product analytics must use the definitions a
 | `GET /api/v1/search?q=&workspace_id=&team_id=` | Authorized key/title search; never search across inaccessible teams. |
 
 Notification creation belongs in the same transaction as the issue/comment event or in a transactional outbox. A best-effort background task alone can lose inbox events after a process crash.
+
+### Implemented M6 behavior
+
+Saved views persist the normalized M4 filter grammar as JSON, never SQL, and re-run team authorization every time they are listed or executed. Private views are owner-only; team and workspace visibility only affect discoverability and never broaden underlying issue access. Inbox rows are created in the same database transaction as collaboration events for mentioned users and issue watchers. Mentions arrive as structured, team-validated user IDs from the autocomplete UI. Ordinary watcher activity excludes the actor to prevent noise, while an explicit self-mention creates a `self_mention` reminder. Listing or marking a notification rechecks current workspace/team access, so removing a member immediately hides old issue content without deleting authored history. The Web app exposes My Issues, Saved Views, and Inbox with unread state and mark-read navigation.
+
+### Implemented M4 query encoding
+
+The Summary endpoint accepts repeatable `cycle`, `project`, `status`, `priority`, `assignee`, and `label` parameters. The sentinel values `none` (cycle/project) and `unassigned` (assignee) include records without that relationship. `due`, `ownership`, `label_match`, `date_from`, `date_to`, `include_archived`, and `timezone` complete the allowlisted filter surface. Every referenced resource is validated against the selected team before aggregates run. The default trend window is fourteen viewer-local days; date filters affect the trend basis without silently changing snapshot cards.
+
+### Implemented M4 layering
+
+`SummaryService` owns authorization, request normalization, and validation error translation. It delegates cross-domain read-model assembly to `SummaryOperator`, which composes the public `IssueRepository`, `ProjectRepository`, and `WorkspaceRepository` interfaces. Only concrete repository implementations own a SQLAlchemy session and issue database queries; neither the service nor the operator imports SQLAlchemy or accesses a repository's internal `db` attribute. This boundary keeps the Summary read model composable without coupling the application layer to persistence details.
