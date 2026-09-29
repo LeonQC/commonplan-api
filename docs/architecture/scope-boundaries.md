@@ -12,6 +12,7 @@ This table is the navigation, authorization, and persistence source of truth. A 
 | Workspace profile, members, invitations, domain policy | Workspace | Settings → Workspace | Owner/admin writes; membership reads are workspace-wide. |
 | GitHub integration | Workspace | Settings → Workspace → Applications | PR titles are matched against every Team issue prefix in the workspace; no Team or project mapping exists. |
 | Overview, Summary, Issues, Cycles, Projects | Team | Expanded Team sub-navigation | These resources and dashboards use an explicit `team_id`. |
+| Team members | Team | Team → Members | Team leads and workspace admins manage access for the selected Team; candidates must already be workspace members. |
 | Workflow states and labels | Team | Team configuration context | They define one Team's issue workflow and taxonomy. |
 | Cycle dashboard | Team + Cycle | Team → Cycles | A Cycle belongs to exactly one Team; its dashboard is the Summary read model filtered by that Cycle. |
 
