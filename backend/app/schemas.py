@@ -83,6 +83,35 @@ class WorkspaceRead(BaseModel):
     updated_at: datetime
 
 
+class WorkspaceSettingsUpdate(BaseModel):
+    allow_member_invites: bool | None = None
+    default_timezone: str | None = Field(default=None, min_length=1, max_length=64)
+    domain_policy: str | None = None
+
+
+class WorkspaceSettingsRead(BaseModel):
+    workspace_id: str
+    allow_member_invites: bool
+    default_timezone: str
+    domain_policy: str
+    updated_by_user_id: int | None
+    created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AuditEventRead(BaseModel):
+    id: str
+    workspace_id: str
+    actor_user_id: int | None
+    action: str
+    target_type: str
+    target_id: str | None
+    details: dict
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
 class TeamCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     issue_prefix: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9]{1,11}$")

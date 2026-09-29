@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Response, status
 
 from app.auth import CurrentUser
 from app.schemas import (
+    AuditEventRead,
     InvitationAccept,
     InvitationCreate,
     InvitationRead,
@@ -14,6 +15,8 @@ from app.schemas import (
     WorkspaceCreate,
     WorkspaceRead,
     WorkspaceUpdate,
+    WorkspaceSettingsRead,
+    WorkspaceSettingsUpdate,
 )
 from app.services.workspace_service import (
     WorkspaceConflict,
@@ -108,6 +111,42 @@ def update_workspace(
             *service.update_workspace(current_user, workspace_id, payload.model_dump(exclude_unset=True))
         )
     except (WorkspaceNotFound, WorkspaceForbidden, WorkspaceConflict) as exc:
+        raise _translate(exc) from exc
+
+
+@router.get("/workspaces/{workspace_id}/settings", response_model=WorkspaceSettingsRead)
+def get_workspace_settings(workspace_id: str, current_user: CurrentUser, service: WorkspaceServiceDep):
+    try:
+        return service.workspace_settings(current_user, workspace_id)
+    except (WorkspaceNotFound, WorkspaceForbidden) as exc:
+        raise _translate(exc) from exc
+
+
+@router.patch("/workspaces/{workspace_id}/settings", response_model=WorkspaceSettingsRead)
+def update_workspace_settings(
+    workspace_id: str,
+    payload: WorkspaceSettingsUpdate,
+    current_user: CurrentUser,
+    service: WorkspaceServiceDep,
+):
+    try:
+        return service.update_workspace_settings(
+            current_user, workspace_id, payload.model_dump(exclude_unset=True)
+        )
+    except (WorkspaceNotFound, WorkspaceForbidden, WorkspaceValidationError) as exc:
+        raise _translate(exc) from exc
+
+
+@router.get("/workspaces/{workspace_id}/audit-events", response_model=list[AuditEventRead])
+def list_audit_events(
+    workspace_id: str,
+    current_user: CurrentUser,
+    service: WorkspaceServiceDep,
+    limit: int = 100,
+):
+    try:
+        return service.audit_events(current_user, workspace_id, limit)
+    except (WorkspaceNotFound, WorkspaceForbidden) as exc:
         raise _translate(exc) from exc
 
 

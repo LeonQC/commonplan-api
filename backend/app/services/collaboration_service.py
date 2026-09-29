@@ -42,7 +42,11 @@ class CollaborationService:
         mentioned = self._mentioned_users(user, workspace_id, issue.team_id, mentioned_user_ids or [])
         self.repository.replace_mentions(comment.id, mentioned)
         self._ensure_watcher(issue.id, user.id, "participated")
-        for user_id in mentioned:
+        # The author is already added as a participant above. Trying to add the
+        # same (issue_id, user_id) watcher again in this uncommitted unit of
+        # work violates the composite primary key when somebody mentions
+        # themselves in their first comment.
+        for user_id in mentioned - {user.id}:
             self._ensure_watcher(issue.id, user_id, "mentioned")
         event_id = self._event(issue.id, user.id, "comment.created", {"comment_id": comment.id, "mentioned_user_ids": sorted(mentioned)})
         self._notify(issue, event_id, user.id, "comment", mentioned, {"issue_key": issue.key, "comment_id": comment.id})

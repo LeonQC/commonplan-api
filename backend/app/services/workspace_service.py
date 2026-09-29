@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import Depends
-from app.models import Team, TeamMembership, User, WorkflowState, Workspace, WorkspaceInvitation, WorkspaceMembership
+from app.models import AuditEvent, Team, TeamMembership, User, WorkflowState, Workspace, WorkspaceInvitation, WorkspaceMembership, WorkspaceSettings
 from app.repositories.errors import RepositoryConflictError
 from app.repositories.workspace_repository import WorkspaceRepository, WorkspaceRepositoryDep
 
@@ -49,6 +49,7 @@ class WorkspaceService:
         )
         self.repository.add(workspace)
         self.repository.add(membership)
+        self.repository.add(WorkspaceSettings(workspace_id=workspace.id, updated_by_user_id=user.id))
         self._commit()
         self.repository.refresh(workspace)
         return workspace, membership
@@ -63,6 +64,7 @@ class WorkspaceService:
         for key in ("name", "description"):
             if key in changes:
                 setattr(workspace, key, changes[key].strip() if isinstance(changes[key], str) else changes[key])
+        self._audit(workspace_id, user.id, "workspace.updated", "workspace", workspace_id, {"fields": sorted(changes)})
         self._commit()
         self.repository.refresh(workspace)
         return workspace, membership
@@ -152,6 +154,7 @@ class WorkspaceService:
                 self._ensure_other_owner(workspace_id, target_user_id)
             membership.role = role
             membership.status = "active"
+        self._audit(workspace_id, user.id, "workspace.member.updated", "user", str(target_user_id), {"role": role})
         self._commit()
         return target_user, membership
 
@@ -165,7 +168,38 @@ class WorkspaceService:
             self._ensure_other_owner(workspace_id, target_user_id)
         self.repository.delete_team_memberships_for_workspace(workspace_id, target_user_id)
         self.repository.delete(membership)
+        self._audit(workspace_id, user.id, "workspace.member.removed", "user", str(target_user_id), {})
         self._commit()
+
+    def workspace_settings(self, user: User, workspace_id: str):
+        self._require_workspace_member(user, workspace_id)
+        settings = self.repository.settings(workspace_id)
+        if settings is None:
+            settings = WorkspaceSettings(workspace_id=workspace_id, updated_by_user_id=user.id)
+            self.repository.add(settings)
+            self._commit()
+            self.repository.refresh(settings)
+        return settings
+
+    def update_workspace_settings(self, user: User, workspace_id: str, changes: dict):
+        _workspace, membership = self._require_workspace_member(user, workspace_id)
+        self._require_workspace_admin(membership)
+        if changes.get("domain_policy") not in {None, "invite_only", "verified_domains"}:
+            raise WorkspaceValidationError("Invalid domain policy")
+        settings = self.workspace_settings(user, workspace_id)
+        for key in ("allow_member_invites", "default_timezone", "domain_policy"):
+            if key in changes and changes[key] is not None:
+                setattr(settings, key, changes[key])
+        settings.updated_by_user_id = user.id
+        self._audit(workspace_id, user.id, "workspace.settings.updated", "workspace_settings", workspace_id, {"fields": sorted(changes)})
+        self._commit()
+        self.repository.refresh(settings)
+        return settings
+
+    def audit_events(self, user: User, workspace_id: str, limit: int = 100):
+        _workspace, membership = self._require_workspace_member(user, workspace_id)
+        self._require_workspace_admin(membership)
+        return self.repository.audit_events(workspace_id, min(max(limit, 1), 200))
 
     def team_members(self, user: User, workspace_id: str, team_id: str):
         self.get_team(user, workspace_id, team_id)
@@ -278,6 +312,12 @@ class WorkspaceService:
         count = self.repository.other_active_owner_count(workspace_id, excluded_user_id)
         if not count:
             raise WorkspaceValidationError("Workspace must keep an active owner")
+
+    def _audit(self, workspace_id, actor_user_id, action, target_type, target_id, details):
+        self.repository.add(AuditEvent(
+            id=str(uuid.uuid4()), workspace_id=workspace_id, actor_user_id=actor_user_id,
+            action=action, target_type=target_type, target_id=target_id, details=details,
+        ))
 
     def _commit(self):
         try:

@@ -105,3 +105,27 @@ def test_invitation_is_email_bound_and_can_assign_a_team(context):
     assert outsider.id in {
         member.id for member, _membership in service.team_members(outsider, workspace.id, team.id)
     }
+
+
+def test_workspace_settings_are_admin_owned_and_audited(context):
+    service, owner, outsider = context
+    workspace, _membership = service.create_workspace(
+        owner, name="CommonPlan", slug="commonplan", description=None
+    )
+    service.put_workspace_member(owner, workspace.id, outsider.id, "member")
+
+    settings = service.update_workspace_settings(owner, workspace.id, {
+        "allow_member_invites": True,
+        "default_timezone": "America/New_York",
+        "domain_policy": "invite_only",
+    })
+
+    assert settings.allow_member_invites is True
+    assert settings.default_timezone == "America/New_York"
+    assert "workspace.settings.updated" in {
+        event.action for event in service.audit_events(owner, workspace.id)
+    }
+    with pytest.raises(WorkspaceForbidden):
+        service.update_workspace_settings(outsider, workspace.id, {"allow_member_invites": False})
+    with pytest.raises(WorkspaceForbidden):
+        service.audit_events(outsider, workspace.id)

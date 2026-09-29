@@ -92,6 +92,18 @@ def test_explicit_self_mention_creates_reminder_without_watcher_noise(context):
     assert inbox["notifications"][0].kind == "self_mention"
 
 
+def test_first_comment_can_mention_self_without_duplicate_watcher(context):
+    views, collaboration, _workspaces, owner, _teammate, workspace, _team, issue = context
+
+    collaboration.create_comment(owner, workspace.id, issue.key, "@Owner remember this", [owner.id])
+    inbox = views.inbox(owner, workspace.id, unread_only=False)
+    state = collaboration.collaboration(owner, workspace.id, issue.key)
+
+    assert inbox["unread_count"] == 1
+    assert inbox["notifications"][0].kind == "self_mention"
+    assert [watcher.user_id for watcher, _user in state["watchers"]] == [owner.id]
+
+
 def test_mentions_reject_users_outside_the_team(context):
     _views, collaboration, workspaces, owner, teammate, workspace, team, issue = context
     workspaces.delete_team_member(owner, workspace.id, team.id, teammate.id)

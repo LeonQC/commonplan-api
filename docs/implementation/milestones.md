@@ -66,7 +66,8 @@ Exit checks:
 ### M1.3 — Navigation and Team Overview
 
 - Add current workspace/team routing and persistence through user preference or URL state.
-- Add Team child menu destinations such as Overview, Issues, Projects, Cycles, Views, and Settings.
+- Add Team child menu destinations such as Overview, Summary, Issues, Projects, and Cycles.
+- Keep My Issues, Saved Views, Inbox, and Settings at workspace level; a saved view may still target one Team.
 - Implement Team Overview counts as derived queries, not a stored overview table.
 - Verify a user can belong to multiple teams and switching teams never leaks data.
 

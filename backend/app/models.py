@@ -89,6 +89,33 @@ class WorkspaceMembership(Base):
     )
 
 
+class WorkspaceSettings(Base):
+    __tablename__ = "workspace_settings"
+
+    workspace_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True
+    )
+    allow_member_invites: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    default_timezone: Mapped[str] = mapped_column(String(64), default="UTC", nullable=False)
+    domain_policy: Mapped[str] = mapped_column(String(24), default="invite_only", nullable=False)
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class AuditEvent(Base):
+    __tablename__ = "audit_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), index=True)
+    actor_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    action: Mapped[str] = mapped_column(String(120), index=True)
+    target_type: Mapped[str] = mapped_column(String(64))
+    target_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    details: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
 class Team(Base):
     __tablename__ = "teams"
     __table_args__ = (UniqueConstraint("workspace_id", "issue_prefix"),)
