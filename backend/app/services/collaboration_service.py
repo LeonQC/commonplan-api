@@ -46,7 +46,7 @@ class CollaborationService:
             self._ensure_watcher(issue.id, user_id, "mentioned")
         event_id = self._event(issue.id, user.id, "comment.created", {"comment_id": comment.id, "mentioned_user_ids": sorted(mentioned)})
         self._notify(issue, event_id, user.id, "comment", mentioned, {"issue_key": issue.key, "comment_id": comment.id})
-        self.repository.commit()
+        self.repository.save_changes()
         self.repository.refresh(comment)
         return self._comment_activity(comment)
 
@@ -67,7 +67,7 @@ class CollaborationService:
             self._ensure_watcher(issue.id, user_id, "mentioned")
         event_id = self._event(issue.id, user.id, "comment.updated", {"comment_id": comment.id, "mentioned_user_ids": sorted(mentioned)})
         self._notify(issue, event_id, user.id, "comment_updated", mentioned, {"issue_key": issue.key, "comment_id": comment.id})
-        self.repository.commit()
+        self.repository.save_changes()
         self.repository.refresh(comment)
         return self._comment_activity(comment)
 
@@ -80,7 +80,7 @@ class CollaborationService:
         comment.deleted_at = datetime.now(timezone.utc)
         self.repository.replace_mentions(comment.id, set())
         self._event(issue.id, user.id, "comment.deleted", {"comment_id": comment.id})
-        self.repository.commit()
+        self.repository.save_changes()
 
     def collaboration(self, user: User, workspace_id: str, key: str):
         issue = self._issue(user, workspace_id, key)
@@ -94,7 +94,7 @@ class CollaborationService:
         issue = self._issue(user, workspace_id, key)
         self._ensure_watcher(issue.id, user.id, "manual")
         self._event(issue.id, user.id, "watcher.added", {"user_id": user.id})
-        self.repository.commit()
+        self.repository.save_changes()
         return self.collaboration(user, workspace_id, key)
 
     def unwatch(self, user: User, workspace_id: str, key: str):
@@ -103,7 +103,7 @@ class CollaborationService:
         if watcher is not None:
             self.repository.delete(watcher)
             self._event(issue.id, user.id, "watcher.removed", {"user_id": user.id})
-            self.repository.commit()
+            self.repository.save_changes()
         return self.collaboration(user, workspace_id, key)
 
     def create_sub_issue(self, user: User, workspace_id: str, key: str, values: dict):

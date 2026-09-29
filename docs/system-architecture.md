@@ -232,3 +232,27 @@ Redis loses cached copies only; PostgreSQL remains authoritative.
 Accounts are created directly in Auth PostgreSQL. On first authenticated API use, the Business API
 provisions a local `users` projection from the verified JWT. Business PostgreSQL stores no passwords,
 provider subjects, or refresh-token ledger; Auth Service is the unambiguous authentication owner.
+
+## Repository boundary
+
+Both the Business API and Auth Service enforce a strict persistence boundary:
+
+```mermaid
+flowchart LR
+    route[Route] --> service[Service]
+    service --> operator[Optional operator]
+    service --> repository[Repository protocol]
+    operator --> repository
+    repository --> sqlalchemy[SQLAlchemy session and queries]
+    sqlalchemy --> database[(PostgreSQL)]
+```
+
+Routes, services, and operators may use repository protocols but never receive a SQLAlchemy
+`Session`, build SQL expressions, access a repository's internal session, or call database
+`commit`/`rollback` APIs. Repositories expose intention-revealing query and persistence methods such
+as `assigned_issues`, `other_active_owner_count`, and `save_changes`; their SQLAlchemy implementations
+own query construction, transaction completion, rollback, and persistence-error translation.
+
+An AST regression test scans both applications and fails if a route, service, or operator imports
+SQLAlchemy/database dependencies, accesses `.db`, `.commit`, or `.rollback`, or constructs a concrete
+`SqlAlchemy*Repository`. This keeps the boundary enforceable as new modules are added.

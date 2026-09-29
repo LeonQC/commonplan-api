@@ -26,6 +26,10 @@ Then open:
 
 Run the companion [`commonplan-web`](https://github.com/LeonQC/commonplan-web) repository at <http://localhost:5173>.
 
+## GitHub pull-request linking
+
+M7 links pull requests to issues when a PR title contains an exact item key. Local GitHub delivery requires a public forwarding URL; follow the [local GitHub webhook setup guide](docs/github-integration-local.md) for the smee daemon, environment variables, GitHub settings, and verification steps.
+
 ## Tests
 
 ```bash

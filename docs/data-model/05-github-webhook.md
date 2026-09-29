@@ -38,7 +38,7 @@ Deliveries are an independent inbox: a `ping` or unmatched event may have no PR 
 
 ## Configuration, not an installation model
 
-For the first workspace, server-side configuration can hold `GITHUB_WEBHOOK_SECRET`, `GITHUB_ALLOWED_ORG_ID`, `GITHUB_WORKSPACE_ID`, and optionally `GITHUB_HOOK_ID`. GitHub administrators configure an organization- or repository-level webhook URL and subscribe to `pull_request` events. The Workspace Applications page displays connection health, last delivery, the organization name, and setup instructions; it does not show the secret. A personal Google login under Connected accounts is unrelated.
+For the first workspace, server-side configuration holds `GITHUB_WEBHOOK_SECRET`, `GITHUB_ALLOWED_OWNER_ID`, `GITHUB_ALLOWED_OWNER_LOGIN`, `GITHUB_WORKSPACE_ID`, and optionally `GITHUB_HOOK_ID`. The owner may be a GitHub organization or personal account; numeric owner ID is the security boundary and login is additional validation/display metadata. GitHub administrators configure repository webhooks and subscribe to `pull_request` events. The Workspace Applications page displays connection health, last delivery, the owner name, and setup instructions; it does not show the secret. A personal Google login under Connected accounts is unrelated.
 
 If multiple CommonPlan workspaces later connect different GitHub organizations or need self-service setup, introduce `github_webhook_connections(workspace_id, github_org_id, hook_id, encrypted_secret_reference, enabled, last_delivery_at)` with `UNIQUE(github_org_id)` for unambiguous routing. Do **not** add it before that requirement exists.
 
@@ -52,7 +52,7 @@ If multiple CommonPlan workspaces later connect different GitHub organizations o
 
 ## Exact match and event lifecycle
 
-1. `POST /webhooks/github` verifies `X-Hub-Signature-256` over the **raw body** with constant-time comparison, checks the allowed GitHub organization/hook, and persists the delivery ID before processing. A bad signature gets 401; an unknown source is rejected.
+1. `POST /webhooks/github` verifies `X-Hub-Signature-256` over the **raw body** with constant-time comparison, checks the allowed numeric GitHub owner and optional hook ID, and persists the delivery ID before processing. A bad signature gets 401; an unknown source is rejected.
 2. On `pull_request` `opened`, `edited`, `reopened`, `closed`, or draft-status changes, upsert the PR snapshot. Extract all distinct exact keys matching registered team prefixes plus `-` plus digits. `KEY-3` must not match `KEY-31`; branch names and PR bodies are ignored.
 3. For each key found **in the configured workspace**, attach the PR if the issue exists. On title edit, detach links whose keys disappeared and attach new matches. A title with no matching issue leaves the PR unlinked. A title containing two valid issue keys can link to both.
 4. Use the PR's GitHub `updated_at` to guard against stale out-of-order deliveries. Duplicate delivery IDs are idempotent. Recalculate the visible PR status from the newest accepted snapshot.

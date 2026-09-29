@@ -5,10 +5,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import Depends
-from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
-
 from app.models import Team, TeamMembership, User, WorkflowState, Workspace, WorkspaceInvitation, WorkspaceMembership
+from app.repositories.errors import RepositoryConflictError
 from app.repositories.workspace_repository import WorkspaceRepository, WorkspaceRepositoryDep
 
 
@@ -140,7 +138,7 @@ class WorkspaceService:
         self._require_workspace_admin(actor)
         if role not in {"owner", "admin", "member"}:
             raise WorkspaceValidationError("Invalid workspace role")
-        target_user = self.repository.db.get(User, target_user_id)
+        target_user = self.repository.user(target_user_id)
         if target_user is None or target_user.is_deleted:
             raise WorkspaceNotFound
         membership = self.repository.workspace_membership(workspace_id, target_user_id)
@@ -165,11 +163,7 @@ class WorkspaceService:
             raise WorkspaceNotFound
         if membership.role == "owner":
             self._ensure_other_owner(workspace_id, target_user_id)
-        team_ids = select(Team.id).where(Team.workspace_id == workspace_id)
-        self.repository.db.query(TeamMembership).filter(
-            TeamMembership.user_id == target_user_id,
-            TeamMembership.team_id.in_(team_ids),
-        ).delete(synchronize_session=False)
+        self.repository.delete_team_memberships_for_workspace(workspace_id, target_user_id)
         self.repository.delete(membership)
         self._commit()
 
@@ -188,7 +182,7 @@ class WorkspaceService:
         workspace_membership = self.repository.workspace_membership(workspace_id, target_user_id)
         if workspace_membership is None or workspace_membership.status != "active":
             raise WorkspaceValidationError("Team member must be an active workspace member")
-        target_user = self.repository.db.get(User, target_user_id)
+        target_user = self.repository.user(target_user_id)
         membership = self.repository.team_membership(team_id, target_user_id)
         if membership is None:
             membership = TeamMembership(team_id=team_id, user_id=target_user_id, role=role)
@@ -281,23 +275,18 @@ class WorkspaceService:
         return team
 
     def _ensure_other_owner(self, workspace_id: str, excluded_user_id: int):
-        count = self.repository.db.scalar(
-            select(func.count()).select_from(WorkspaceMembership).where(
-                WorkspaceMembership.workspace_id == workspace_id,
-                WorkspaceMembership.role == "owner",
-                WorkspaceMembership.status == "active",
-                WorkspaceMembership.user_id != excluded_user_id,
-            )
-        )
+        count = self.repository.other_active_owner_count(workspace_id, excluded_user_id)
         if not count:
             raise WorkspaceValidationError("Workspace must keep an active owner")
 
     def _commit(self):
         try:
-            self.repository.commit()
-        except IntegrityError as exc:
-            self.repository.db.rollback()
+            self.repository.save_changes()
+        except RepositoryConflictError as exc:
             raise WorkspaceConflict from exc
+
+    def is_team_member(self, team_id: str, user_id: int) -> bool:
+        return self.repository.team_membership(team_id, user_id) is not None
 
     @staticmethod
     def _aware(value: datetime) -> datetime:

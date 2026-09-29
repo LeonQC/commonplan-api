@@ -44,7 +44,7 @@ class ViewNotificationService:
             sort_by=values.get("sort_by", "updated_at"), sort_direction=values.get("sort_direction", "desc"),
         )
         self.repository.add(view)
-        self.repository.commit()
+        self.repository.save_changes()
         self.repository.refresh(view)
         return view
 
@@ -54,14 +54,14 @@ class ViewNotificationService:
         self._validate_view(user, workspace_id, proposed)
         for key, value in changes.items():
             setattr(view, key, value.strip() if key == "name" else value)
-        self.repository.commit()
+        self.repository.save_changes()
         self.repository.refresh(view)
         return view
 
     def archive_view(self, user: User, workspace_id: str, view_id: str):
         view = self._view(user, workspace_id, view_id, manage=True)
         view.archived_at = datetime.now(timezone.utc)
-        self.repository.commit()
+        self.repository.save_changes()
 
     def execute_view(self, user: User, workspace_id: str, view_id: str):
         view = self._view(user, workspace_id, view_id)
@@ -82,7 +82,7 @@ class ViewNotificationService:
             raise ViewNotificationNotFound
         if notification.read_at is None:
             notification.read_at = datetime.now(timezone.utc)
-            self.repository.commit()
+            self.repository.save_changes()
             self.repository.refresh(notification)
         return notification
 

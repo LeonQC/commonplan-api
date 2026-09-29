@@ -1,11 +1,8 @@
 from typing import Annotated, Any
 
 from fastapi import Depends
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
-
-from app.database import DbSession
 from app.models import User
+from app.repositories.errors import RepositoryConflictError
 from app.repositories.user_repository import UserRepository, UserRepositoryDep
 from app.services.access_token_verifier import AuthPrincipal
 
@@ -21,9 +18,8 @@ def normalize_email(email: str) -> str:
 class UserService:
     """Owns user business rules and transaction boundaries."""
 
-    def __init__(self, repository: UserRepository, db: Session):
+    def __init__(self, repository: UserRepository):
         self.repository = repository
-        self.db = db
 
     def get_by_id(self, user_id: int) -> User | None:
         return self.repository.get_by_id(user_id)
@@ -103,9 +99,8 @@ class UserService:
 
     def _commit(self, user: User) -> User:
         try:
-            self.db.commit()
-        except IntegrityError as exc:
-            self.db.rollback()
+            self.repository.save_changes()
+        except RepositoryConflictError as exc:
             raise UserConflict from exc
         self.repository.refresh(user)
         return user
@@ -113,9 +108,8 @@ class UserService:
 
 def get_user_service(
     repository: UserRepositoryDep,
-    db: DbSession,
 ) -> UserService:
-    return UserService(repository, db)
+    return UserService(repository)
 
 
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
