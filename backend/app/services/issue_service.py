@@ -1,10 +1,10 @@
 import uuid
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Annotated
 
 from fastapi import Depends
-from app.models import Cycle, Issue, IssueComment, IssueEvent, Label, Project, User
+from app.models import Cycle, Issue, IssueComment, IssueEvent, Label, Project, TeamCycleSettings, User
 from app.repositories.errors import RepositoryConflictError
 from app.repositories.issue_repository import IssueRepository, IssueRepositoryDep
 from app.services.workspace_service import WorkspaceService, WorkspaceServiceDep
@@ -27,7 +27,37 @@ class IssueService:
 
     def cycles(self, user: User, workspace_id: str, team_id: str):
         self._access(user, workspace_id, team_id)
+        self._synchronize_cycle_schedule(team_id)
         return self.repository.cycles(team_id)
+
+    def cycle_settings(self, user: User, workspace_id: str, team_id: str):
+        self._access(user, workspace_id, team_id)
+        settings = self.repository.cycle_settings(team_id)
+        if settings is None:
+            raise IssueNotFound
+        return settings
+
+    def update_cycle_settings(self, user: User, workspace_id: str, team_id: str, changes: dict):
+        _team, team_membership, workspace_membership = self._access(user, workspace_id, team_id)
+        if workspace_membership.role not in {"owner", "admin"} and (
+            team_membership is None or team_membership.role != "lead"
+        ):
+            raise IssueForbidden
+        settings = self.repository.cycle_settings(team_id)
+        if settings is None:
+            settings = TeamCycleSettings(team_id=team_id, updated_by_user_id=user.id)
+            self.repository.add(settings)
+        for field in ("enabled", "duration_weeks", "upcoming_cycle_count", "next_cycle_starts_on", "rollover_incomplete"):
+            if field in changes:
+                setattr(settings, field, changes[field])
+        if settings.enabled and settings.next_cycle_starts_on is None:
+            settings.next_cycle_starts_on = date.today()
+        settings.updated_by_user_id = user.id
+        self._commit()
+        self.repository.refresh(settings)
+        self._synchronize_cycle_schedule(team_id)
+        self.repository.refresh(settings)
+        return settings
 
     def create_cycle(self, user: User, workspace_id: str, team_id: str, *, name, starts_on, ends_on):
         _team, team_membership, workspace_membership = self._access(user, workspace_id, team_id)
@@ -273,6 +303,63 @@ class IssueService:
             milestone = self.repository.milestone(milestone_id)
             if milestone is None or milestone.project_id != project_id:
                 raise IssueValidationError("Milestone must belong to the selected project")
+
+    def _synchronize_cycle_schedule(self, team_id: str):
+        settings = self.repository.cycle_settings(team_id)
+        if settings is None or not settings.enabled or settings.next_cycle_starts_on is None:
+            return
+        cycles = self.repository.cycles(team_id)
+        today = date.today()
+        duration = timedelta(weeks=settings.duration_weeks)
+        cursor = max((cycle.ends_on for cycle in cycles), default=settings.next_cycle_starts_on)
+        cursor = max(cursor, settings.next_cycle_starts_on)
+        future_count = sum(cycle.starts_on > today for cycle in cycles)
+        changed = False
+        generated = 0
+        while future_count < settings.upcoming_cycle_count and generated < 64:
+            cycle = Cycle(
+                id=str(uuid.uuid4()),
+                team_id=team_id,
+                name=f"Cycle {cursor.isoformat()}",
+                starts_on=cursor,
+                ends_on=cursor + duration,
+            )
+            self.repository.add(cycle)
+            cycles.append(cycle)
+            if cycle.starts_on > today:
+                future_count += 1
+            cursor = cycle.ends_on
+            generated += 1
+            changed = True
+
+        if changed:
+            self._commit()
+            cycles = self.repository.cycles(team_id)
+
+        now = datetime.now(timezone.utc)
+        state_categories = {state.id: state.category for state in self.repository.states(team_id)}
+        rollover_changed = False
+        for cycle in sorted(cycles, key=lambda row: (row.starts_on, row.id)):
+            if cycle.completed_at is not None or cycle.ends_on > today:
+                continue
+            next_cycle = next(
+                (candidate for candidate in cycles if candidate.starts_on >= cycle.ends_on),
+                None,
+            )
+            if next_cycle is None:
+                continue
+            if settings.rollover_incomplete:
+                for issue in self.repository.issues(team_id, cycle_id=cycle.id):
+                    if state_categories.get(issue.workflow_state_id) in {"done", "canceled"}:
+                        continue
+                    previous_cycle_id = issue.cycle_id
+                    issue.cycle_id = next_cycle.id
+                    issue.version += 1
+                    self._event(issue, None, "issue.updated", {"fields": {"cycle_id": {"from": previous_cycle_id, "to": next_cycle.id}}, "automation": "cycle_rollover"})
+            cycle.completed_at = now
+            rollover_changed = True
+        if rollover_changed:
+            self._commit()
 
     def _event(self, issue: Issue, user: User | None, event_type: str, changes: dict):
         self.repository.add(IssueEvent(

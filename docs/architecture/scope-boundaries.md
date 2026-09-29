@@ -14,6 +14,7 @@ This table is the navigation, authorization, and persistence source of truth. A 
 | Overview, Summary, Issues, Cycles, Projects | Team | Expanded Team sub-navigation | These resources and dashboards use an explicit `team_id`. |
 | Team members | Team | Team → Members | Team leads and workspace admins manage access for the selected Team; candidates must already be workspace members. |
 | Workflow states and labels | Team | Team configuration context | They define one Team's issue workflow and taxonomy. |
-| Cycle dashboard | Team + Cycle | Team → Cycles | A Cycle belongs to exactly one Team; its dashboard is the Summary read model filtered by that Cycle. |
+| Cycle board | Team + Cycle | Team → Cycles | A Cycle belongs to exactly one Team. Its operational dashboard is a sprint/Kanban board grouped by the Team's workflow states; it is separate from Team Summary analytics. |
+| Cycle schedule | Team | Team → Cycles → Schedule | Team leads and workspace admins configure repeating duration, number of future cycles, and unfinished-issue rollover. |
 
 The Business API continues to authorize every request independently. Navigation placement is not an access-control mechanism.

@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import DbSession
-from app.models import Cycle, Issue, IssueComment, IssueEvent, IssueLabel, Label, Project, ProjectMilestone, Team, User, WorkflowState
+from app.models import Cycle, Issue, IssueComment, IssueEvent, IssueLabel, Label, Project, ProjectMilestone, Team, TeamCycleSettings, User, WorkflowState
 from app.repositories.errors import RepositoryConflictError
 
 
@@ -17,6 +17,7 @@ class IssueRepository(Protocol):
     def default_state(self, team_id: str) -> WorkflowState | None: ...
     def cycles(self, team_id: str) -> list[Cycle]: ...
     def cycle(self, cycle_id: str) -> Cycle | None: ...
+    def cycle_settings(self, team_id: str) -> TeamCycleSettings | None: ...
     def labels(self, team_id: str) -> list[Label]: ...
     def label(self, label_id: str) -> Label | None: ...
     def project(self, project_id: str) -> Project | None: ...
@@ -63,6 +64,9 @@ class SqlAlchemyIssueRepository:
 
     def cycle(self, cycle_id: str) -> Cycle | None:
         return self.db.get(Cycle, cycle_id)
+
+    def cycle_settings(self, team_id: str) -> TeamCycleSettings | None:
+        return self.db.get(TeamCycleSettings, team_id)
 
     def labels(self, team_id: str) -> list[Label]:
         return list(self.db.scalars(select(Label).where(Label.team_id == team_id).order_by(Label.name, Label.id)))

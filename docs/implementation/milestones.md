@@ -18,7 +18,7 @@ This plan delivers CommonPlan as runnable vertical slices across the `commonplan
 | --- | --- | --- | --- |
 | M0 — Platform baseline | Independent Auth Service, JWT-protected Business API, BFF refresh vault, clean databases | None | Register/login with password or Google, refresh, call protected API |
 | M1 — Workspace and Team | Multi-workspace and multi-team membership plus navigation | M0 | Switch workspace and Team 1/Team 2; see only authorized teams |
-| M2 — Issue planning core | Workflow states, cycles, issues, labels, full issue detail, comments, and activity | M1 | Create `KEY-1`, open its deep link, edit every core field, comment, and inspect its history |
+| M2 — Issue planning core | Workflow states, rolling cycles, sprint/Kanban board, issues, labels, full issue detail, comments, and activity | M1 | Create `KEY-1`, plan it into a repeating cycle, move it across the board, and inspect its history |
 | M3 — Projects | Project brief, objectives, milestones, updates, linked issues | M2 | Create and manage a project with description, progress, and work items |
 | M4 — Team Summary and analytics | Per-team summary, filters, visualizations, and drill-down | M2; richer project charts use M3 | Switch teams and see filter-consistent Jira-style analytics |
 | M5 — Collaboration | Comment lifecycle, sub-issues, mentions, notifications, and complete resource policies | M2 | Collaborate on an issue while cross-team access fails closed |
@@ -86,6 +86,9 @@ Scope:
 - Generate immutable team-prefixed keys under transaction/row lock.
 - Implement issue list, create, detail, update, assignment, labels, cycle filtering, and optimistic `version` checks.
 - Build Issues and Cycles pages plus a dedicated, deep-linkable issue detail route.
+- Make each Cycle detail an operational sprint/Kanban board grouped by Team workflow state; moving a card updates the issue state with optimistic locking.
+- Configure repeating 1–8 week cycles, retain 1–15 upcoming cycles, and optionally roll unfinished work into the next cycle when the prior cycle ends.
+- Keep Team Summary as a separate analytical page; a Cycle board is not a Summary filter preset.
 - The detail page edits title, description, status, priority, assignee, cycle, due date, and labels; it also supports adding comments and reading the chronological activity stream.
 - Keep property changes immediate, but save long-form title/description edits explicitly so users do not lose a draft to an accidental blur.
 
@@ -95,6 +98,7 @@ Exit demo:
 - See different issue lists when switching teams.
 - Refresh the detail URL and use browser back/forward without losing navigation state.
 - Submit a stale update and receive 409 rather than silently overwriting another edit.
+- Enable a two-week rolling schedule, see future cycles created, and verify unfinished issues roll into the next cycle exactly once.
 
 ## M3 — Projects
 

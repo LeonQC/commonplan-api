@@ -196,7 +196,29 @@ class CycleRead(BaseModel):
     name: str
     starts_on: date
     ends_on: date
+    completed_at: datetime | None
     created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CycleSettingsUpdate(BaseModel):
+    enabled: bool | None = None
+    duration_weeks: int | None = Field(default=None, ge=1, le=8)
+    upcoming_cycle_count: int | None = Field(default=None, ge=1, le=15)
+    next_cycle_starts_on: date | None = None
+    rollover_incomplete: bool | None = None
+
+
+class CycleSettingsRead(BaseModel):
+    team_id: str
+    enabled: bool
+    duration_weeks: int
+    upcoming_cycle_count: int
+    next_cycle_starts_on: date | None
+    rollover_incomplete: bool
+    updated_by_user_id: int | None
+    created_at: datetime
+    updated_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
 

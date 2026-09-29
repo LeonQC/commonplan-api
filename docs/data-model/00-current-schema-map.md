@@ -239,7 +239,8 @@ The `(auth_issuer, auth_subject)` badges denote the partial composite unique ind
 | Business | `teams` | `Team` | Team scope, issue prefix, and atomic issue-number allocator |
 | Business | `team_memberships` | `TeamMembership` | Team membership and lead/member role |
 | Business | `workflow_states` | `WorkflowState` | Team-owned issue workflow states and categories |
-| Business | `cycles` | `Cycle` | Non-overlapping team planning windows |
+| Business | `cycles` | `Cycle` | Non-overlapping team planning windows with idempotent completion tracking |
+| Business | `team_cycle_settings` | `TeamCycleSettings` | Repeating Team cycle cadence, future-window count, and unfinished-work rollover policy |
 | Business | `labels` | `Label` | Team-owned issue labels |
 | Business | `projects` | `Project` | Team-owned project brief, status, lead, and target date |
 | Business | `project_objectives` | `ProjectObjective` | Ordered objectives and measurable success criteria |

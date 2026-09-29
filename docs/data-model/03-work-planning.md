@@ -8,6 +8,7 @@
 erDiagram
     TEAM ||--o{ WORKFLOW_STATE : defines
     TEAM ||--o{ CYCLE : schedules
+    TEAM ||--|| TEAM_CYCLE_SETTINGS : configures
     TEAM ||--o{ PROJECT : owns
     PROJECT ||--o{ PROJECT_OBJECTIVE : states
     PROJECT ||--o{ PROJECT_UPDATE : reports
@@ -32,6 +33,15 @@ erDiagram
         string name
         date starts_on
         date ends_on
+        datetime completed_at
+    }
+    TEAM_CYCLE_SETTINGS {
+        uuid team_id PK
+        bool enabled
+        int duration_weeks
+        int upcoming_cycle_count
+        date next_cycle_starts_on
+        bool rollover_incomplete
     }
     PROJECT {
         uuid id PK
@@ -67,7 +77,8 @@ erDiagram
 | Entity | Fields and PostgreSQL types | Invariants / UI use |
 | --- | --- | --- |
 | `workflow_states` | `id uuid PK`, `team_id uuid FK`, `name varchar(80)`, `category varchar(24)`, `position integer`, `is_default boolean`, `created_at`, `updated_at` | Category: `backlog`, `todo`, `in_progress`, `done`, `canceled`. `UNIQUE(team_id, name)` and `UNIQUE(team_id, position)`; exactly one default creation state per team. Summary groups by category, not display name. |
-| `cycles` | `id uuid PK`, `team_id uuid FK`, `name varchar(120)`, `starts_on date`, `ends_on date`, `created_at`, `updated_at`, `archived_at NULL` | Require `starts_on < ends_on` and no overlapping non-archived cycles within one team. The current cycle is derived from dates; allow planned future cycles. Avoid a stored counter that can diverge from issue assignments. |
+| `cycles` | `id uuid PK`, `team_id uuid FK`, `name varchar(120)`, `starts_on date`, `ends_on date`, `completed_at timestamptz NULL`, `created_at`, `updated_at`, `archived_at NULL` | Require `starts_on < ends_on` and no overlapping non-archived cycles within one team. The current cycle is derived from dates. `completed_at` makes automatic rollover idempotent; it is not a progress counter. |
+| `team_cycle_settings` | `team_id uuid PK/FK`, `enabled boolean`, `duration_weeks smallint`, `upcoming_cycle_count smallint`, `next_cycle_starts_on date NULL`, `rollover_incomplete boolean`, `updated_by_user_id integer NULL FK`, timestamps | One repeating schedule per Team. Duration is 1–8 weeks and retained future count is 1–15. When enabled, synchronization creates future windows and optionally moves incomplete issues from each newly completed cycle to its successor exactly once. |
 | `projects` | `id uuid PK`, `team_id uuid FK`, `name varchar(255)`, `slug varchar(100)`, `summary text NULL`, `description text NULL`, `status varchar(24)`, `lead_user_id integer NULL FK`, `target_date date NULL`, timestamps, `archived_at NULL` | `UNIQUE(team_id, slug)`. Status: `planned`, `in_progress`, `paused`, `completed`, `canceled`. Lead must be an active team member. Summary and long description are distinct UI fields. |
 | `project_objectives` | `id uuid PK`, `project_id uuid FK`, `kind varchar(24)`, `body text`, `position integer`, `is_met boolean`, timestamps | `kind` is `objective` or `success_criterion`. Ordered rows support the project brief/checklist; do not hide these in opaque JSON. |
 | `project_updates` | `id uuid PK`, `project_id uuid FK`, `author_user_id integer FK`, `body text`, `health varchar(16) NULL`, `created_at`, `edited_at NULL` | Latest update is `ORDER BY created_at DESC, id DESC LIMIT 1`; retain author and history. |
@@ -147,6 +158,7 @@ Allocate `issues.number` by locking the owning `teams` row and incrementing `nex
 | Endpoint | Purpose / access |
 | --- | --- |
 | `GET/POST /api/v1/workspaces/{w}/teams/{t}/cycles` | Team member list/create; cycle administration requires lead/admin. |
+| `GET/PATCH /api/v1/workspaces/{w}/teams/{t}/cycle-settings` | Read the Team's repeating schedule; lead/admin changes duration, future-cycle count, start anchor, and rollover behavior. |
 | `GET/POST /api/v1/workspaces/{w}/teams/{t}/projects` | Team member list/create. List includes status, lead, issue/milestone progress, target date. |
 | `GET/PATCH /api/v1/workspaces/{w}/teams/{t}/projects/{p}` | Project detail/brief and metadata; lead/admin or authorized team member can update. |
 | `GET/POST /api/v1/workspaces/{w}/teams/{t}/projects/{p}/objectives|milestones|updates` | Ordered objectives, milestone management, and authored status updates. |

@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import Depends
-from app.models import AuditEvent, Team, TeamMembership, User, WorkflowState, Workspace, WorkspaceInvitation, WorkspaceMembership, WorkspaceSettings
+from app.models import AuditEvent, Team, TeamCycleSettings, TeamMembership, User, WorkflowState, Workspace, WorkspaceInvitation, WorkspaceMembership, WorkspaceSettings
 from app.repositories.errors import RepositoryConflictError
 from app.repositories.workspace_repository import WorkspaceRepository, WorkspaceRepositoryDep
 
@@ -88,6 +88,7 @@ class WorkspaceService:
         team_membership = TeamMembership(team_id=team.id, user_id=user.id, role="lead")
         self.repository.add(team)
         self.repository.add(team_membership)
+        self.repository.add(TeamCycleSettings(team_id=team.id, updated_by_user_id=user.id))
         for position, (state_name, category, is_default) in enumerate(
             [
                 ("Backlog", "backlog", False),
