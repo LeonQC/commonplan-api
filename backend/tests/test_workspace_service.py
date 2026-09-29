@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.database import Base
 from app.models import User
 from app.repositories.workspace_repository import SqlAlchemyWorkspaceRepository
-from app.services.workspace_service import WorkspaceForbidden, WorkspaceService
+from app.services.workspace_service import WorkspaceForbidden, WorkspaceService, WorkspaceValidationError
 
 
 @pytest.fixture
@@ -129,3 +129,29 @@ def test_workspace_settings_are_admin_owned_and_audited(context):
         service.update_workspace_settings(outsider, workspace.id, {"allow_member_invites": False})
     with pytest.raises(WorkspaceForbidden):
         service.audit_events(outsider, workspace.id)
+
+
+def test_workspace_and_team_members_can_be_added_removed_and_last_owner_is_protected(context):
+    service, owner, outsider = context
+    workspace, _membership = service.create_workspace(
+        owner, name="CommonPlan", slug="commonplan", description=None
+    )
+    team, _team_membership = service.create_team(
+        owner, workspace.id, name="Core", issue_prefix="KEY", description=None
+    )
+
+    with pytest.raises(WorkspaceValidationError, match="keep an active owner"):
+        service.delete_workspace_member(owner, workspace.id, owner.id)
+
+    service.put_workspace_member(owner, workspace.id, outsider.id, "member")
+    service.put_team_member(owner, workspace.id, team.id, outsider.id, "lead")
+    assert {member.id for member, _ in service.team_members(owner, workspace.id, team.id)} == {owner.id, outsider.id}
+
+    service.delete_team_member(owner, workspace.id, team.id, outsider.id)
+    assert {member.id for member, _ in service.team_members(owner, workspace.id, team.id)} == {owner.id}
+
+    service.put_team_member(owner, workspace.id, team.id, outsider.id, "member")
+    service.delete_workspace_member(owner, workspace.id, outsider.id)
+    assert {member.id for member, _ in service.team_members(owner, workspace.id, team.id)} == {owner.id}
+    actions = {event.action for event in service.audit_events(owner, workspace.id)}
+    assert {"team.member.updated", "team.member.removed", "workspace.member.removed"}.issubset(actions)

@@ -223,6 +223,7 @@ class WorkspaceService:
             self.repository.add(membership)
         else:
             membership.role = role
+        self._audit(workspace_id, user.id, "team.member.updated", "team_membership", f"{team_id}:{target_user_id}", {"team_id": team_id, "user_id": target_user_id, "role": role})
         self._commit()
         return target_user, membership
 
@@ -236,6 +237,7 @@ class WorkspaceService:
         if membership is None:
             raise WorkspaceNotFound
         self.repository.delete(membership)
+        self._audit(workspace_id, user.id, "team.member.removed", "team_membership", f"{team_id}:{target_user_id}", {"team_id": team_id, "user_id": target_user_id})
         self._commit()
 
     def create_invitation(self, user: User, workspace_id: str, *, email: str, role: str, team_id: str | None):
@@ -257,6 +259,7 @@ class WorkspaceService:
             expires_at=datetime.now(timezone.utc) + timedelta(days=7),
         )
         self.repository.add(invitation)
+        self._audit(workspace_id, user.id, "workspace.invitation.created", "workspace_invitation", invitation.id, {"email": invitation.email, "role": role, "team_id": team_id})
         self._commit()
         self.repository.refresh(invitation)
         return invitation, raw_token
