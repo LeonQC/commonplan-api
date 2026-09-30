@@ -16,6 +16,7 @@ class CollaborationRepository(Protocol):
     def relation_types(self, workspace_id: str) -> list[IssueRelationType]: ...
     def relation_type(self, relation_type_id: str) -> IssueRelationType | None: ...
     def relations_for_issue(self, issue_id: str) -> list[IssueRelation]: ...
+    def relations_for_team(self, team_id: str) -> list[IssueRelation]: ...
     def relation(self, relation_id: str) -> IssueRelation | None: ...
     def relation_pairs(self, relation_type_id: str) -> list[tuple[str, str]]: ...
     def watcher(self, issue_id: str, user_id: int) -> IssueWatcher | None: ...
@@ -63,6 +64,20 @@ class SqlAlchemyCollaborationRepository:
         return list(self.db.scalars(
             select(IssueRelation)
             .where((IssueRelation.source_issue_id == issue_id) | (IssueRelation.target_issue_id == issue_id))
+            .order_by(IssueRelation.created_at, IssueRelation.id)
+        ))
+
+    def relations_for_team(self, team_id: str) -> list[IssueRelation]:
+        team_issue_ids = select(Issue.id).where(
+            Issue.team_id == team_id,
+            Issue.archived_at.is_(None),
+        )
+        return list(self.db.scalars(
+            select(IssueRelation)
+            .where(
+                (IssueRelation.source_issue_id.in_(team_issue_ids))
+                | (IssueRelation.target_issue_id.in_(team_issue_ids))
+            )
             .order_by(IssueRelation.created_at, IssueRelation.id)
         ))
 

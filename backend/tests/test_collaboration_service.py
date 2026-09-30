@@ -65,14 +65,30 @@ def test_configurable_issue_relations_and_dependency_cycles(context):
     assert created["label"] == "is blocked by"
     assert collaboration.relations(owner, workspace.id, second.key)[0]["label"] == "blocks"
 
+    inverse_created = collaboration.create_relation(
+        owner, workspace.id, third.key, blocked_by.id, second.key, direction="incoming"
+    )
+    assert inverse_created["label"] == "blocks"
+    summaries = collaboration.relation_summaries(owner, workspace.id, team.id)
+    assert {
+        (row["issue_key"], row["label"], row["related_issue_key"])
+        for row in summaries
+    } >= {
+        (parent.key, "is blocked by", second.key),
+        (second.key, "blocks", parent.key),
+        (third.key, "blocks", second.key),
+        (second.key, "is blocked by", third.key),
+    }
+
     with pytest.raises(CollaborationValidationError, match="already exists"):
         collaboration.create_relation(owner, workspace.id, parent.key, blocked_by.id, second.key)
     with pytest.raises(CollaborationValidationError, match="itself"):
         collaboration.create_relation(owner, workspace.id, parent.key, blocked_by.id, parent.key)
 
-    collaboration.create_relation(owner, workspace.id, second.key, blocked_by.id, third.key)
+    fourth, _ = collaboration.issues.create_issue(owner, workspace.id, team.id, title="Fourth", label_ids=[])
+    collaboration.create_relation(owner, workspace.id, second.key, blocked_by.id, fourth.key)
     with pytest.raises(CollaborationValidationError, match="cycle"):
-        collaboration.create_relation(owner, workspace.id, third.key, blocked_by.id, parent.key)
+        collaboration.create_relation(owner, workspace.id, fourth.key, blocked_by.id, parent.key)
 
     custom = collaboration.create_relation_type(owner, workspace.id, {
         "key": "validated_by", "forward_label": "is validated by",

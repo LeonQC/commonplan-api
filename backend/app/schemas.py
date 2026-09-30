@@ -348,6 +348,7 @@ class IssueRelationTypeRead(BaseModel):
 class IssueRelationCreate(BaseModel):
     relation_type_id: str
     target_issue_key: str = Field(min_length=2, max_length=32)
+    direction: str = Field(default="outgoing", pattern=r"^(outgoing|incoming)$")
 
 
 class IssueRelationRead(BaseModel):
@@ -359,6 +360,16 @@ class IssueRelationRead(BaseModel):
     related_issue: IssueRead
     created_by_user_id: int
     created_at: datetime
+
+
+class IssueRelationSummaryRead(BaseModel):
+    issue_key: str
+    relation_id: str
+    type_key: str
+    category: str
+    direction: str
+    label: str
+    related_issue_key: str
 
 
 class SavedViewCreate(BaseModel):

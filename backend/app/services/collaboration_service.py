@@ -170,9 +170,47 @@ class CollaborationService:
             })
         return result
 
-    def create_relation(self, user: User, workspace_id: str, key: str, relation_type_id: str, target_issue_key: str):
-        source = self._issue(user, workspace_id, key)
-        target = self._issue(user, workspace_id, target_issue_key)
+    def relation_summaries(self, user: User, workspace_id: str, team_id: str):
+        try:
+            self.workspaces.get_team(user, workspace_id, team_id)
+        except Exception as exc:
+            if exc.__class__.__name__.endswith("NotFound"):
+                raise ResourceNotFound from exc
+            raise ResourceForbidden from exc
+        summaries = []
+        for relation in self.repository.relations_for_team(team_id):
+            relation_type = self.repository.relation_type(relation.relation_type_id)
+            source = self.repository.issue_by_id(relation.source_issue_id)
+            target = self.repository.issue_by_id(relation.target_issue_id)
+            if relation_type is None or source is None or target is None or relation_type.archived_at is not None:
+                continue
+            for issue, related, direction in (
+                (source, target, "outgoing"),
+                (target, source, "incoming"),
+            ):
+                if issue.team_id != team_id:
+                    continue
+                try:
+                    self.policy.require_issue_access(user, workspace_id, related)
+                except (ResourceForbidden, ResourceNotFound):
+                    continue
+                summaries.append({
+                    "issue_key": issue.key,
+                    "relation_id": relation.id,
+                    "type_key": relation_type.key,
+                    "category": relation_type.category,
+                    "direction": direction,
+                    "label": relation_type.forward_label if direction == "outgoing" or relation_type.symmetric else relation_type.inverse_label,
+                    "related_issue_key": related.key,
+                })
+        return summaries
+
+    def create_relation(self, user: User, workspace_id: str, key: str, relation_type_id: str, target_issue_key: str, direction: str = "outgoing"):
+        current = self._issue(user, workspace_id, key)
+        related = self._issue(user, workspace_id, target_issue_key)
+        source, target = current, related
+        if direction == "incoming":
+            source, target = target, source
         if source.id == target.id:
             raise CollaborationValidationError("An issue cannot relate to itself")
         relation_type = self.repository.relation_type(relation_type_id)
@@ -193,13 +231,13 @@ class CollaborationService:
         )
         self.repository.add(relation)
         self.repository.flush()
-        self._event(source.id, user.id, "issue.relation_added", {
+        self._event(current.id, user.id, "issue.relation_added", {
             "relation_id": relation.id, "relation_type": relation_type.key,
-            "related_issue_key": target.key,
+            "related_issue_key": related.key,
         })
         self.repository.save_changes()
         self.repository.refresh(relation)
-        return next(row for row in self.relations(user, workspace_id, source.key) if row["relation"].id == relation.id)
+        return next(row for row in self.relations(user, workspace_id, key) if row["relation"].id == relation.id)
 
     def delete_relation(self, user: User, workspace_id: str, key: str, relation_id: str):
         issue = self._issue(user, workspace_id, key)

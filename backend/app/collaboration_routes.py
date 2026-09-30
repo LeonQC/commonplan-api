@@ -4,7 +4,7 @@ from app.auth import CurrentUser
 from app.issue_routes import _issue_read
 from app.schemas import (
     IssueActivityRead, IssueCollaborationRead, IssueCommentCreate, IssueCommentPatch,
-    IssueCreate, IssueRelationCreate, IssueRelationRead, IssueRelationTypeCreate,
+    IssueCreate, IssueRelationCreate, IssueRelationRead, IssueRelationSummaryRead, IssueRelationTypeCreate,
     IssueRelationTypeRead, IssueWatcherRead,
 )
 from app.services.collaboration_service import CollaborationServiceDep, CollaborationValidationError
@@ -109,12 +109,21 @@ def issue_relations(workspace_id: str, key: str, current_user: CurrentUser, serv
     except Exception as exc: raise _error(exc) from exc
 
 
+@router.get(
+    "/workspaces/{workspace_id}/teams/{team_id}/issue-relation-summaries",
+    response_model=list[IssueRelationSummaryRead],
+)
+def issue_relation_summaries(workspace_id: str, team_id: str, current_user: CurrentUser, service: CollaborationServiceDep):
+    try: return service.relation_summaries(current_user, workspace_id, team_id)
+    except Exception as exc: raise _error(exc) from exc
+
+
 @router.post("/workspaces/{workspace_id}/issues/{key}/relations", response_model=IssueRelationRead, status_code=201)
 def create_issue_relation(workspace_id: str, key: str, payload: IssueRelationCreate, current_user: CurrentUser, service: CollaborationServiceDep):
     try:
         row = service.create_relation(
             current_user, workspace_id, key,
-            payload.relation_type_id, payload.target_issue_key,
+            payload.relation_type_id, payload.target_issue_key, payload.direction,
         )
         return _relation_read(service, row)
     except Exception as exc: raise _error(exc) from exc
