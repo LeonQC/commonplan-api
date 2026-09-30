@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import Depends
-from app.models import AuditEvent, Team, TeamCycleSettings, TeamMembership, User, WorkflowState, Workspace, WorkspaceInvitation, WorkspaceMembership, WorkspaceSettings
+from app.models import AuditEvent, IssueRelationType, Team, TeamCycleSettings, TeamMembership, User, WorkflowState, Workspace, WorkspaceInvitation, WorkspaceMembership, WorkspaceSettings
 from app.repositories.errors import RepositoryConflictError
 from app.repositories.workspace_repository import WorkspaceRepository, WorkspaceRepositoryDep
 
@@ -48,8 +48,23 @@ class WorkspaceService:
             status="active",
         )
         self.repository.add(workspace)
+        # The relation types below reference the workspace directly. Flush the
+        # aggregate root first so SQLite and PostgreSQL both observe the FK in
+        # a deterministic order while keeping the transaction atomic.
+        self.repository.flush()
         self.repository.add(membership)
         self.repository.add(WorkspaceSettings(workspace_id=workspace.id, updated_by_user_id=user.id))
+        for key, forward_label, inverse_label, category, symmetric, allow_cycles in (
+            ("blocked_by", "is blocked by", "blocks", "dependency", False, False),
+            ("relates_to", "relates to", "relates to", "custom", True, True),
+            ("action_item_of", "is an action item of", "has action item", "custom", False, True),
+        ):
+            self.repository.add(IssueRelationType(
+                id=str(uuid.uuid4()), workspace_id=workspace.id, key=key,
+                forward_label=forward_label, inverse_label=inverse_label,
+                category=category, is_system=True, symmetric=symmetric,
+                allow_cycles=allow_cycles,
+            ))
         self._commit()
         self.repository.refresh(workspace)
         return workspace, membership

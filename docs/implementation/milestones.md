@@ -146,15 +146,16 @@ Exit demo:
 
 Scope:
 
-- Add comment edit/delete policy, mentions, sub-issues, watchers, and notification-producing collaboration events.
+- Add comment edit/delete policy, mentions, sub-issues, typed issue relationships, watchers, and notification-producing collaboration events.
 - Centralize workspace/team/resource authorization and cover it with a role/resource matrix.
-- Expand the M2 issue detail with comment actions, sub-issues, mentions, and notification controls.
+- Expand the M2 issue detail with comment actions, sub-issues, workspace-configurable relationships, mentions, and notification controls.
 
 Exit demo:
 
 - Two authorized users collaborate on one issue and see ordered activity.
 - Removing team access blocks future reads without erasing authored history.
 - A user cannot infer another team's issue by identifier, comment, event, or notification.
+- A parent shows child progress in the issue list; directional relationship labels reverse correctly, and dependency cycles are rejected.
 
 ## M6 — Saved views and Inbox
 

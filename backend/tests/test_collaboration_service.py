@@ -9,7 +9,7 @@ from app.models import CommentMention, User
 from app.repositories.collaboration_repository import SqlAlchemyCollaborationRepository
 from app.repositories.issue_repository import SqlAlchemyIssueRepository
 from app.repositories.workspace_repository import SqlAlchemyWorkspaceRepository
-from app.services.collaboration_service import CollaborationService
+from app.services.collaboration_service import CollaborationService, CollaborationValidationError
 from app.services.issue_service import IssueService
 from app.services.resource_policy import ResourceForbidden
 from app.services.workspace_service import WorkspaceService
@@ -52,6 +52,40 @@ def test_comment_mentions_watchers_and_sub_issues(context):
     assert db.get(CommentMention, (comment["id"], owner.id)) is not None
     assert child.parent_issue_id == parent.id
     assert collaboration.collaboration(owner, workspace.id, parent.key)["children"][0].id == child.id
+    assert child.id in {issue.id for issue, _labels in collaboration.issues.list_issues(owner, workspace.id, _team.id)}
+
+
+def test_configurable_issue_relations_and_dependency_cycles(context):
+    _db, collaboration, _workspaces, owner, teammate, _observer, workspace, team, parent = context
+    blocked_by = next(row for row in collaboration.relation_types(owner, workspace.id) if row.key == "blocked_by")
+    second, _ = collaboration.issues.create_issue(owner, workspace.id, team.id, title="Second", label_ids=[])
+    third, _ = collaboration.issues.create_issue(owner, workspace.id, team.id, title="Third", label_ids=[])
+
+    created = collaboration.create_relation(owner, workspace.id, parent.key, blocked_by.id, second.key)
+    assert created["label"] == "is blocked by"
+    assert collaboration.relations(owner, workspace.id, second.key)[0]["label"] == "blocks"
+
+    with pytest.raises(CollaborationValidationError, match="already exists"):
+        collaboration.create_relation(owner, workspace.id, parent.key, blocked_by.id, second.key)
+    with pytest.raises(CollaborationValidationError, match="itself"):
+        collaboration.create_relation(owner, workspace.id, parent.key, blocked_by.id, parent.key)
+
+    collaboration.create_relation(owner, workspace.id, second.key, blocked_by.id, third.key)
+    with pytest.raises(CollaborationValidationError, match="cycle"):
+        collaboration.create_relation(owner, workspace.id, third.key, blocked_by.id, parent.key)
+
+    custom = collaboration.create_relation_type(owner, workspace.id, {
+        "key": "validated_by", "forward_label": "is validated by",
+        "inverse_label": "validates", "category": "custom",
+        "symmetric": False, "allow_cycles": True,
+    })
+    assert custom.is_system is False
+    with pytest.raises(ResourceForbidden):
+        collaboration.create_relation_type(teammate, workspace.id, {
+            "key": "member_type", "forward_label": "member forward",
+            "inverse_label": "member inverse", "category": "custom",
+            "symmetric": False, "allow_cycles": True,
+        })
 
 
 def test_comment_policy_and_removed_member_access(context):

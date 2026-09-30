@@ -322,6 +322,45 @@ class IssueCollaborationRead(BaseModel):
     sub_issues: list[IssueRead]
 
 
+class IssueRelationTypeCreate(BaseModel):
+    key: str = Field(min_length=2, max_length=64, pattern=r"^[a-z][a-z0-9_]*$")
+    forward_label: str = Field(min_length=2, max_length=120)
+    inverse_label: str = Field(min_length=2, max_length=120)
+    category: str = Field(default="custom", pattern=r"^(dependency|custom)$")
+    symmetric: bool = False
+    allow_cycles: bool = True
+
+
+class IssueRelationTypeRead(BaseModel):
+    id: str
+    workspace_id: str
+    key: str
+    forward_label: str
+    inverse_label: str
+    category: str
+    is_system: bool
+    symmetric: bool
+    allow_cycles: bool
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class IssueRelationCreate(BaseModel):
+    relation_type_id: str
+    target_issue_key: str = Field(min_length=2, max_length=32)
+
+
+class IssueRelationRead(BaseModel):
+    id: str
+    relation_type_id: str
+    type_key: str
+    direction: str
+    label: str
+    related_issue: IssueRead
+    created_by_user_id: int
+    created_at: datetime
+
+
 class SavedViewCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     team_id: str | None = None

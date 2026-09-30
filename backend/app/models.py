@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, JSON, Numeric, SmallInteger, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, Date, DateTime, ForeignKey, JSON, Numeric, SmallInteger, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -380,6 +380,40 @@ class CommentMention(Base):
 
     comment_id: Mapped[str] = mapped_column(String(36), ForeignKey("issue_comments.id", ondelete="CASCADE"), primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class IssueRelationType(Base):
+    __tablename__ = "issue_relation_types"
+    __table_args__ = (UniqueConstraint("workspace_id", "key"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), index=True)
+    key: Mapped[str] = mapped_column(String(64))
+    forward_label: Mapped[str] = mapped_column(String(120))
+    inverse_label: Mapped[str] = mapped_column(String(120))
+    category: Mapped[str] = mapped_column(String(24), default="custom")
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False)
+    symmetric: Mapped[bool] = mapped_column("is_symmetric", Boolean, default=False)
+    allow_cycles: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class IssueRelation(Base):
+    __tablename__ = "issue_relations"
+    __table_args__ = (
+        CheckConstraint("source_issue_id <> target_issue_id"),
+        UniqueConstraint("relation_type_id", "source_issue_id", "target_issue_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), index=True)
+    relation_type_id: Mapped[str] = mapped_column(String(36), ForeignKey("issue_relation_types.id", ondelete="CASCADE"), index=True)
+    source_issue_id: Mapped[str] = mapped_column(String(36), ForeignKey("issues.id", ondelete="CASCADE"), index=True)
+    target_issue_id: Mapped[str] = mapped_column(String(36), ForeignKey("issues.id", ondelete="CASCADE"), index=True)
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

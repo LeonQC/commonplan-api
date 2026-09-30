@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from app.models import IssueComment, IssueEvent, IssueWatcher, User
+from app.models import IssueComment, IssueEvent, IssueRelation, IssueRelationType, IssueWatcher, User
 from app.repositories.collaboration_repository import CollaborationRepository, CollaborationRepositoryDep
 from app.services.issue_service import IssueService, IssueServiceDep
 from app.services.resource_policy import ResourceForbidden, ResourceNotFound, ResourcePolicy
@@ -120,10 +120,133 @@ class CollaborationService:
             parent_issue_id=parent.id,
         )
 
+    def relation_types(self, user: User, workspace_id: str):
+        self._workspace(user, workspace_id)
+        return self.repository.relation_types(workspace_id)
+
+    def create_relation_type(self, user: User, workspace_id: str, values: dict):
+        _workspace, membership = self._workspace(user, workspace_id)
+        if membership.role not in {"owner", "admin"}:
+            raise ResourceForbidden
+        key = values["key"].strip().lower()
+        if any(row.key == key for row in self.repository.relation_types(workspace_id)):
+            raise CollaborationValidationError("Relation type key already exists")
+        symmetric = values.get("symmetric", False)
+        forward_label = values["forward_label"].strip()
+        inverse_label = values["inverse_label"].strip()
+        if symmetric and forward_label != inverse_label:
+            raise CollaborationValidationError("Symmetric relation labels must match")
+        relation_type = IssueRelationType(
+            id=str(uuid.uuid4()), workspace_id=workspace_id, key=key,
+            forward_label=forward_label, inverse_label=inverse_label,
+            category=values.get("category", "custom"), is_system=False,
+            symmetric=symmetric, allow_cycles=values.get("allow_cycles", True),
+        )
+        self.repository.add(relation_type)
+        self.repository.save_changes()
+        self.repository.refresh(relation_type)
+        return relation_type
+
+    def relations(self, user: User, workspace_id: str, key: str):
+        issue = self._issue(user, workspace_id, key)
+        result = []
+        for relation in self.repository.relations_for_issue(issue.id):
+            relation_type = self.repository.relation_type(relation.relation_type_id)
+            if relation_type is None or relation_type.archived_at is not None:
+                continue
+            outgoing = relation.source_issue_id == issue.id
+            related = self.repository.issue_by_id(
+                relation.target_issue_id if outgoing else relation.source_issue_id
+            )
+            if related is None:
+                continue
+            self.policy.require_issue_access(user, workspace_id, related)
+            result.append({
+                "relation": relation,
+                "type": relation_type,
+                "direction": "outgoing" if outgoing else "incoming",
+                "label": relation_type.forward_label if outgoing or relation_type.symmetric else relation_type.inverse_label,
+                "related": related,
+            })
+        return result
+
+    def create_relation(self, user: User, workspace_id: str, key: str, relation_type_id: str, target_issue_key: str):
+        source = self._issue(user, workspace_id, key)
+        target = self._issue(user, workspace_id, target_issue_key)
+        if source.id == target.id:
+            raise CollaborationValidationError("An issue cannot relate to itself")
+        relation_type = self.repository.relation_type(relation_type_id)
+        if relation_type is None or relation_type.workspace_id != workspace_id or relation_type.archived_at is not None:
+            raise CollaborationValidationError("Relation type does not belong to this workspace")
+        source_id, target_id = source.id, target.id
+        if relation_type.symmetric and source_id > target_id:
+            source_id, target_id = target_id, source_id
+        pairs = self.repository.relation_pairs(relation_type.id)
+        if (source_id, target_id) in pairs:
+            raise CollaborationValidationError("This issue relation already exists")
+        if not relation_type.allow_cycles and self._path_exists(pairs, target_id, source_id):
+            raise CollaborationValidationError("This dependency would create a cycle")
+        relation = IssueRelation(
+            id=str(uuid.uuid4()), workspace_id=workspace_id,
+            relation_type_id=relation_type.id, source_issue_id=source_id,
+            target_issue_id=target_id, created_by_user_id=user.id,
+        )
+        self.repository.add(relation)
+        self.repository.flush()
+        self._event(source.id, user.id, "issue.relation_added", {
+            "relation_id": relation.id, "relation_type": relation_type.key,
+            "related_issue_key": target.key,
+        })
+        self.repository.save_changes()
+        self.repository.refresh(relation)
+        return next(row for row in self.relations(user, workspace_id, source.key) if row["relation"].id == relation.id)
+
+    def delete_relation(self, user: User, workspace_id: str, key: str, relation_id: str):
+        issue = self._issue(user, workspace_id, key)
+        relation = self.repository.relation(relation_id)
+        if relation is None or relation.workspace_id != workspace_id or issue.id not in {relation.source_issue_id, relation.target_issue_id}:
+            raise ResourceNotFound
+        related_id = relation.target_issue_id if relation.source_issue_id == issue.id else relation.source_issue_id
+        related = self.repository.issue_by_id(related_id)
+        self.policy.require_issue_access(user, workspace_id, related)
+        relation_type = self.repository.relation_type(relation.relation_type_id)
+        self.repository.delete(relation)
+        self._event(issue.id, user.id, "issue.relation_removed", {
+            "relation_id": relation_id,
+            "relation_type": relation_type.key if relation_type else "unknown",
+            "related_issue_key": related.key,
+        })
+        self.repository.save_changes()
+
     def _issue(self, user, workspace_id, key):
         issue = self.repository.issue(workspace_id, key.upper())
         self.policy.require_issue_access(user, workspace_id, issue)
         return issue
+
+    def _workspace(self, user, workspace_id):
+        try:
+            return self.workspaces.get_workspace(user, workspace_id)
+        except Exception as exc:
+            if exc.__class__.__name__.endswith("NotFound"):
+                raise ResourceNotFound from exc
+            raise ResourceForbidden from exc
+
+    @staticmethod
+    def _path_exists(pairs, start_id, target_id):
+        adjacency = {}
+        for source_id, destination_id in pairs:
+            adjacency.setdefault(source_id, set()).add(destination_id)
+        pending = [start_id]
+        visited = set()
+        while pending:
+            current = pending.pop()
+            if current == target_id:
+                return True
+            if current in visited:
+                continue
+            visited.add(current)
+            pending.extend(adjacency.get(current, ()))
+        return False
 
     def _mentioned_users(self, user, workspace_id, team_id, mentioned_user_ids):
         members = self.workspaces.team_members(user, workspace_id, team_id)
