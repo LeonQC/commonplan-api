@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Query
 from app.auth import CurrentUser
 from app.presenters import issue_read
 from app.schemas import (
-    CycleCreate, CycleRead, IssueActivityRead, IssueCreate, IssueRead, IssueUpdate,
+    CycleCreate, CycleRead, CycleSettingsRead, CycleSettingsUpdate, IssueActivityRead, IssueCreate, IssueRead, IssueUpdate,
     LabelCreate, LabelRead, WorkflowStateRead,
 )
 from app.services.issue_service import (
@@ -51,6 +51,30 @@ def list_cycles(workspace_id: str, team_id: str, current_user: CurrentUser, serv
 def create_cycle(workspace_id: str, team_id: str, payload: CycleCreate, current_user: CurrentUser, service: IssueServiceDep):
     try:
         return service.create_cycle(current_user, workspace_id, team_id, **payload.model_dump())
+    except (IssueNotFound, IssueForbidden, IssueConflict, IssueValidationError) as exc:
+        raise _error(exc) from exc
+
+
+@router.get("/workspaces/{workspace_id}/teams/{team_id}/cycle-settings", response_model=CycleSettingsRead)
+def get_cycle_settings(workspace_id: str, team_id: str, current_user: CurrentUser, service: IssueServiceDep):
+    try:
+        return service.cycle_settings(current_user, workspace_id, team_id)
+    except (IssueNotFound, IssueForbidden) as exc:
+        raise _error(exc) from exc
+
+
+@router.patch("/workspaces/{workspace_id}/teams/{team_id}/cycle-settings", response_model=CycleSettingsRead)
+def update_cycle_settings(
+    workspace_id: str,
+    team_id: str,
+    payload: CycleSettingsUpdate,
+    current_user: CurrentUser,
+    service: IssueServiceDep,
+):
+    try:
+        return service.update_cycle_settings(
+            current_user, workspace_id, team_id, payload.model_dump(exclude_unset=True)
+        )
     except (IssueNotFound, IssueForbidden, IssueConflict, IssueValidationError) as exc:
         raise _error(exc) from exc
 

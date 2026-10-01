@@ -3,7 +3,7 @@
 This page is the clean implementation baseline for CommonPlan. It contains only the tables and columns that exist after applying the current migration heads:
 
 - Auth DB: `20260910_0002`
-- Business DB: `20260921_0010`
+- Business DB: `20260930_0016`
 
 `IMPLEMENTED` means the table exists in PostgreSQL and has an active SQLAlchemy runtime model. `PROPOSED` means the entity belongs to the target product design but has no migration yet.
 
@@ -87,6 +87,10 @@ erDiagram
     LABELS ||--o{ ISSUE_LABELS : applies
     ISSUES ||--o{ ISSUE_COMMENTS : discusses
     ISSUES ||--o{ ISSUE_EVENTS : records
+    WORKSPACES ||--o{ ISSUE_RELATION_TYPES : defines
+    ISSUE_RELATION_TYPES ||--o{ ISSUE_RELATIONS : types
+    ISSUES ||--o{ ISSUE_RELATIONS : source
+    ISSUES ||--o{ ISSUE_RELATIONS : target
 
     USERS {
         integer id PK
@@ -208,6 +212,24 @@ erDiagram
         varchar_64 event_type
         jsonb changes
     }
+    ISSUE_RELATION_TYPES {
+        varchar_36 id PK
+        varchar_36 workspace_id FK
+        varchar_64 key
+        varchar_120 forward_label
+        varchar_120 inverse_label
+        varchar_24 category
+        boolean is_symmetric
+        boolean allow_cycles
+    }
+    ISSUE_RELATIONS {
+        varchar_36 id PK
+        varchar_36 workspace_id FK
+        varchar_36 relation_type_id FK
+        varchar_36 source_issue_id FK
+        varchar_36 target_issue_id FK
+        integer created_by_user_id FK
+    }
     BROWSER_AUTH_SESSIONS {
         varchar_64 session_hash PK
         varchar_36 auth_subject
@@ -239,7 +261,8 @@ The `(auth_issuer, auth_subject)` badges denote the partial composite unique ind
 | Business | `teams` | `Team` | Team scope, issue prefix, and atomic issue-number allocator |
 | Business | `team_memberships` | `TeamMembership` | Team membership and lead/member role |
 | Business | `workflow_states` | `WorkflowState` | Team-owned issue workflow states and categories |
-| Business | `cycles` | `Cycle` | Non-overlapping team planning windows |
+| Business | `cycles` | `Cycle` | Non-overlapping team planning windows with idempotent completion tracking |
+| Business | `team_cycle_settings` | `TeamCycleSettings` | Repeating Team cycle cadence, future-window count, and unfinished-work rollover policy |
 | Business | `labels` | `Label` | Team-owned issue labels |
 | Business | `projects` | `Project` | Team-owned project brief, status, lead, and target date |
 | Business | `project_objectives` | `ProjectObjective` | Ordered objectives and measurable success criteria |
@@ -249,6 +272,8 @@ The `(auth_issuer, auth_subject)` badges denote the partial composite unique ind
 | Business | `issue_labels` | `IssueLabel` | Many-to-many issue label assignment |
 | Business | `issue_comments` | `IssueComment` | Authored issue discussion with soft-delete timestamps |
 | Business | `issue_events` | `IssueEvent` | Append-only issue change and collaboration history |
+| Business | `issue_relation_types` | `IssueRelationType` | Workspace-owned forward/inverse relationship vocabulary and cycle policy |
+| Business | `issue_relations` | `IssueRelation` | Authorized typed edges between issues in one workspace |
 
 ## Cross-database identity mapping
 
@@ -264,7 +289,7 @@ The following modules introduce `PROPOSED` entities and APIs. References to Busi
 | --- | --- |
 | [01 — Identity and profile](01-identity-profile.md) | User and notification preferences |
 | [02 — Workspace and team](02-workspace-team.md) | Workspaces, teams, memberships, and invitations |
-| [03 — Work planning](03-work-planning.md) | Implemented planning core; sub-issues and production pagination remain proposed |
+| [03 — Work planning](03-work-planning.md) | Implemented planning core, structural sub-issues, and configurable issue relationships; production pagination remains proposed |
 | [04 — Views and notifications](04-views-notifications.md) | Saved views, inbox notifications, and aggregate read models |
 | [05 — GitHub webhook](05-github-webhook.md) | Pull-request snapshots, issue links, and webhook delivery deduplication |
 | [06 — Administration](06-administration.md) | Workspace settings, allowed domains, and audit events |

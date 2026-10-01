@@ -8,6 +8,7 @@
 erDiagram
     TEAM ||--o{ WORKFLOW_STATE : defines
     TEAM ||--o{ CYCLE : schedules
+    TEAM ||--|| TEAM_CYCLE_SETTINGS : configures
     TEAM ||--o{ PROJECT : owns
     PROJECT ||--o{ PROJECT_OBJECTIVE : states
     PROJECT ||--o{ PROJECT_UPDATE : reports
@@ -32,6 +33,15 @@ erDiagram
         string name
         date starts_on
         date ends_on
+        datetime completed_at
+    }
+    TEAM_CYCLE_SETTINGS {
+        uuid team_id PK
+        bool enabled
+        int duration_weeks
+        int upcoming_cycle_count
+        date next_cycle_starts_on
+        bool rollover_incomplete
     }
     PROJECT {
         uuid id PK
@@ -67,7 +77,8 @@ erDiagram
 | Entity | Fields and PostgreSQL types | Invariants / UI use |
 | --- | --- | --- |
 | `workflow_states` | `id uuid PK`, `team_id uuid FK`, `name varchar(80)`, `category varchar(24)`, `position integer`, `is_default boolean`, `created_at`, `updated_at` | Category: `backlog`, `todo`, `in_progress`, `done`, `canceled`. `UNIQUE(team_id, name)` and `UNIQUE(team_id, position)`; exactly one default creation state per team. Summary groups by category, not display name. |
-| `cycles` | `id uuid PK`, `team_id uuid FK`, `name varchar(120)`, `starts_on date`, `ends_on date`, `created_at`, `updated_at`, `archived_at NULL` | Require `starts_on < ends_on` and no overlapping non-archived cycles within one team. The current cycle is derived from dates; allow planned future cycles. Avoid a stored counter that can diverge from issue assignments. |
+| `cycles` | `id uuid PK`, `team_id uuid FK`, `name varchar(120)`, `starts_on date`, `ends_on date`, `completed_at timestamptz NULL`, `created_at`, `updated_at`, `archived_at NULL` | Require `starts_on < ends_on` and no overlapping non-archived cycles within one team. The current cycle is derived from dates. `completed_at` makes automatic rollover idempotent; it is not a progress counter. |
+| `team_cycle_settings` | `team_id uuid PK/FK`, `enabled boolean`, `duration_weeks smallint`, `upcoming_cycle_count smallint`, `next_cycle_starts_on date NULL`, `rollover_incomplete boolean`, `updated_by_user_id integer NULL FK`, timestamps | One repeating schedule per Team. Duration is 1–8 weeks and retained future count is 1–15. When enabled, synchronization creates future windows and optionally moves incomplete issues from each newly completed cycle to its successor exactly once. |
 | `projects` | `id uuid PK`, `team_id uuid FK`, `name varchar(255)`, `slug varchar(100)`, `summary text NULL`, `description text NULL`, `status varchar(24)`, `lead_user_id integer NULL FK`, `target_date date NULL`, timestamps, `archived_at NULL` | `UNIQUE(team_id, slug)`. Status: `planned`, `in_progress`, `paused`, `completed`, `canceled`. Lead must be an active team member. Summary and long description are distinct UI fields. |
 | `project_objectives` | `id uuid PK`, `project_id uuid FK`, `kind varchar(24)`, `body text`, `position integer`, `is_met boolean`, timestamps | `kind` is `objective` or `success_criterion`. Ordered rows support the project brief/checklist; do not hide these in opaque JSON. |
 | `project_updates` | `id uuid PK`, `project_id uuid FK`, `author_user_id integer FK`, `body text`, `health varchar(16) NULL`, `created_at`, `edited_at NULL` | Latest update is `ORDER BY created_at DESC, id DESC LIMIT 1`; retain author and history. |
@@ -86,6 +97,10 @@ erDiagram
     PROJECT_MILESTONE |o--o{ ISSUE : tracks
     BUSINESS_USER |o--o{ ISSUE : assigned_to
     ISSUE |o--o{ ISSUE : parents
+    WORKSPACE ||--o{ ISSUE_RELATION_TYPE : defines
+    ISSUE_RELATION_TYPE ||--o{ ISSUE_RELATION : types
+    ISSUE ||--o{ ISSUE_RELATION : source
+    ISSUE ||--o{ ISSUE_RELATION : target
     ISSUE ||--o{ ISSUE_COMMENT : discusses
     ISSUE ||--o{ ISSUE_EVENT : records
     ISSUE ||--o{ ISSUE_LABEL : tagged_with
@@ -126,6 +141,24 @@ erDiagram
         uuid issue_id PK, FK
         uuid label_id PK, FK
     }
+    ISSUE_RELATION_TYPE {
+        uuid id PK
+        uuid workspace_id FK
+        string key
+        string forward_label
+        string inverse_label
+        string category
+        bool is_symmetric
+        bool allow_cycles
+    }
+    ISSUE_RELATION {
+        uuid id PK
+        uuid workspace_id FK
+        uuid relation_type_id FK
+        uuid source_issue_id FK
+        uuid target_issue_id FK
+        int created_by_user_id FK
+    }
 ```
 
 `TEAM`, `WORKFLOW_STATE`, `PROJECT`, `CYCLE`, `PROJECT_MILESTONE`, and `BUSINESS_USER` are described above or in their owner module; the second diagram trims those boxes to keep the relationship graph readable.
@@ -139,6 +172,10 @@ erDiagram
 | `issue_events` | `id uuid PK`, `issue_id uuid FK`, `actor_user_id integer NULL FK`, `event_type varchar(64)`, `changes jsonb`, `created_at` | Append-only timeline for status/assignee/priority/project/cycle/comment/PR changes. Event payload is versioned and contains changed field names, not credentials. |
 | `issue_watchers` | `issue_id uuid FK`, `user_id integer FK`, `reason varchar(24)`, `created_at`, composite PK | Explicit watchers plus participants/mentioned members. Access is always rechecked against current team membership. |
 | `comment_mentions` | `comment_id uuid FK`, `user_id integer FK`, `created_at`, composite PK | Materialized mention recipients submitted as structured user IDs and validated against active team membership. Display names are presentation only; editing/deleting a comment replaces or clears mentions transactionally. |
+| `issue_relation_types` | `id uuid PK`, `workspace_id uuid FK`, `key varchar(64)`, `forward_label varchar(120)`, `inverse_label varchar(120)`, `category varchar(24)`, `is_system boolean`, `is_symmetric boolean`, `allow_cycles boolean`, timestamps, `archived_at NULL` | Workspace vocabulary. `UNIQUE(workspace_id, key)`. Defaults are `blocked_by`, `relates_to`, and `action_item_of`. Symmetric types use the same label in both directions; dependency types can forbid directed cycles. The API exposes `is_symmetric` as `symmetric`. |
+| `issue_relations` | `id uuid PK`, `workspace_id uuid FK`, `relation_type_id uuid FK`, `source_issue_id uuid FK`, `target_issue_id uuid FK`, `created_by_user_id integer FK`, `created_at` | Typed directed edge. Both issues and the type must belong to the same workspace. Self-links and duplicate typed edges are rejected; symmetric edges are stored in canonical ID order. |
+
+`issues.parent_issue_id` remains the single source of truth for structural hierarchy: it drives sub-issue lists, indentation, and progress. It is intentionally **not** duplicated into `issue_relations`. General semantic links—“is blocked by”, “relates to”, “is an action item of”, and workspace-defined vocabulary—use `issue_relations`. This separation prevents a generic edge from accidentally changing the work breakdown tree.
 
 Allocate `issues.number` by locking the owning `teams` row and incrementing `next_issue_number` in the same transaction. Store the resulting key as immutable text. Add indexes for `(team_id, workflow_state_id, position, id)`, `(assignee_user_id, archived_at, due_date)`, `(project_id, archived_at)`, `(cycle_id, archived_at)`, and `(issue_id, created_at)` on activity tables.
 
@@ -147,6 +184,7 @@ Allocate `issues.number` by locking the owning `teams` row and incrementing `nex
 | Endpoint | Purpose / access |
 | --- | --- |
 | `GET/POST /api/v1/workspaces/{w}/teams/{t}/cycles` | Team member list/create; cycle administration requires lead/admin. |
+| `GET/PATCH /api/v1/workspaces/{w}/teams/{t}/cycle-settings` | Read the Team's repeating schedule; lead/admin changes duration, future-cycle count, start anchor, and rollover behavior. |
 | `GET/POST /api/v1/workspaces/{w}/teams/{t}/projects` | Team member list/create. List includes status, lead, issue/milestone progress, target date. |
 | `GET/PATCH /api/v1/workspaces/{w}/teams/{t}/projects/{p}` | Project detail/brief and metadata; lead/admin or authorized team member can update. |
 | `GET/POST /api/v1/workspaces/{w}/teams/{t}/projects/{p}/objectives|milestones|updates` | Ordered objectives, milestone management, and authored status updates. |
@@ -157,6 +195,9 @@ Allocate `issues.number` by locking the owning `teams` row and incrementing `nex
 | `GET /api/v1/workspaces/{w}/issues/{key}/collaboration` | Current watcher state, authorized watcher display data, and active sub-issues. |
 | `PUT/DELETE /api/v1/workspaces/{w}/issues/{key}/watch` | Idempotently watch or unwatch an issue. |
 | `POST /api/v1/workspaces/{w}/issues/{key}/sub-issues` | Create a same-team child issue through the canonical issue creation transaction. |
+| `GET/POST /api/v1/workspaces/{w}/relation-types` | List workspace relationship vocabulary; workspace owner/admin creates custom types. |
+| `GET/POST /api/v1/workspaces/{w}/issues/{key}/relations` | List directional labels from the selected issue or create a typed relation to another authorized issue in the workspace. |
+| `DELETE /api/v1/workspaces/{w}/issues/{key}/relations/{relationId}` | Remove an existing relation after rechecking access to both participating issues. |
 | `GET /api/v1/workspaces/{w}/issues/{key}/activity` | Comments and events in stable chronological order. M2 returns the full stream; introduce cursor pagination before production-scale histories. |
 | `GET /api/v1/me/issues` | My issues across all teams the caller belongs to, with optional workspace filter. |
 
@@ -174,6 +215,7 @@ Issue detail is a first-class page, not a small list-side editor. Its canonical 
 | Concurrency | Every mutation sends the last observed `version`. A 409 prompts reload/reconciliation instead of overwriting another user's edit. |
 | Activity | Merge visible comments and append-only issue events into one stable chronological stream ordered by `(created_at, id)`. A comment's audit event may be hidden from the presentation when the comment itself is shown, avoiding duplicate timeline rows. |
 | Comments | Authorized team members can add a non-empty comment. Typing `@` selects an authorized member through autocomplete; the API receives stable user IDs rather than parsing names or emails. Explicit self-mentions are allowed as reminders, while ordinary activity by a watcher does not notify that same actor. Creation of the comment and its corresponding audit event is one transaction. |
-| Metadata | Show creator, created/updated timestamps, and current version. Future project, milestone, sub-issue, and GitHub PR areas extend this page without changing its canonical route. |
+| Hierarchy and relationships | Show sub-issues separately from general typed relationships. New children enter the canonical issue list immediately. Relationship labels are rendered from the selected issue's direction, so one stored edge reads “A is blocked by B” from A and “B blocks A” from B. |
+| Metadata | Show creator, created/updated timestamps, and current version. Project, milestone, sub-issue, relationship, and GitHub PR areas share the canonical route. |
 
 Create and list views may expose a compact subset, but they must link to this full page. Core field support cannot exist only in the API.

@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import create_engine
@@ -176,3 +176,40 @@ def test_issue_activity_contains_creation_updates_and_comments(context):
         "comment.created",
     }
     assert next(row for row in activity if row["kind"] == "comment")["body"].startswith("This should")
+
+
+def test_cycle_schedule_creates_upcoming_cycles_and_rolls_open_work(context):
+    service, _workspaces, owner, workspace, team = context
+    today = date.today()
+    previous = service.create_cycle(
+        owner, workspace.id, team.id,
+        name="Previous", starts_on=today - timedelta(days=14), ends_on=today - timedelta(days=7),
+    )
+    current = service.create_cycle(
+        owner, workspace.id, team.id,
+        name="Current", starts_on=today - timedelta(days=7), ends_on=today + timedelta(days=7),
+    )
+    issue, _ = service.create_issue(
+        owner, workspace.id, team.id, title="Carry unfinished work", cycle_id=previous.id, label_ids=[]
+    )
+
+    settings = service.update_cycle_settings(owner, workspace.id, team.id, {
+        "enabled": True,
+        "duration_weeks": 1,
+        "upcoming_cycle_count": 2,
+        "next_cycle_starts_on": current.ends_on,
+        "rollover_incomplete": True,
+    })
+    cycles = service.cycles(owner, workspace.id, team.id)
+    refreshed, _ = service.get_issue(owner, workspace.id, issue.key)
+
+    assert settings.enabled is True
+    assert sum(cycle.starts_on > today for cycle in cycles) >= 2
+    assert refreshed.cycle_id == current.id
+    assert refreshed.version == 2
+    assert next(cycle for cycle in cycles if cycle.id == previous.id).completed_at is not None
+    assert any(
+        row["changes"].get("automation") == "cycle_rollover"
+        for row in service.activity(owner, workspace.id, issue.key)
+        if row["kind"] == "event"
+    )

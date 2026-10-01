@@ -18,7 +18,7 @@ This plan delivers CommonPlan as runnable vertical slices across the `commonplan
 | --- | --- | --- | --- |
 | M0 — Platform baseline | Independent Auth Service, JWT-protected Business API, BFF refresh vault, clean databases | None | Register/login with password or Google, refresh, call protected API |
 | M1 — Workspace and Team | Multi-workspace and multi-team membership plus navigation | M0 | Switch workspace and Team 1/Team 2; see only authorized teams |
-| M2 — Issue planning core | Workflow states, cycles, issues, labels, full issue detail, comments, and activity | M1 | Create `KEY-1`, open its deep link, edit every core field, comment, and inspect its history |
+| M2 — Issue planning core | Workflow states, rolling cycles, sprint/Kanban board, issues, labels, full issue detail, comments, and activity | M1 | Create `KEY-1`, plan it into a repeating cycle, move it across the board, and inspect its history |
 | M3 — Projects | Project brief, objectives, milestones, updates, linked issues | M2 | Create and manage a project with description, progress, and work items |
 | M4 — Team Summary and analytics | Per-team summary, filters, visualizations, and drill-down | M2; richer project charts use M3 | Switch teams and see filter-consistent Jira-style analytics |
 | M5 — Collaboration | Comment lifecycle, sub-issues, mentions, notifications, and complete resource policies | M2 | Collaborate on an issue while cross-team access fails closed |
@@ -66,7 +66,8 @@ Exit checks:
 ### M1.3 — Navigation and Team Overview
 
 - Add current workspace/team routing and persistence through user preference or URL state.
-- Add Team child menu destinations such as Overview, Issues, Projects, Cycles, Views, and Settings.
+- Add Team child menu destinations such as Overview, Summary, Issues, Projects, Cycles, and Members.
+- Keep My Issues, Saved Views, Inbox, and Settings at workspace level; a saved view may still target one Team.
 - Implement Team Overview counts as derived queries, not a stored overview table.
 - Verify a user can belong to multiple teams and switching teams never leaks data.
 
@@ -85,6 +86,9 @@ Scope:
 - Generate immutable team-prefixed keys under transaction/row lock.
 - Implement issue list, create, detail, update, assignment, labels, cycle filtering, and optimistic `version` checks.
 - Build Issues and Cycles pages plus a dedicated, deep-linkable issue detail route.
+- Make each Cycle detail an operational sprint/Kanban board grouped by Team workflow state; moving a card updates the issue state with optimistic locking.
+- Configure repeating 1–8 week cycles, retain 1–15 upcoming cycles, and optionally roll unfinished work into the next cycle when the prior cycle ends.
+- Keep Team Summary as a separate analytical page; a Cycle board is not a Summary filter preset.
 - The detail page edits title, description, status, priority, assignee, cycle, due date, and labels; it also supports adding comments and reading the chronological activity stream.
 - Keep property changes immediate, but save long-form title/description edits explicitly so users do not lose a draft to an accidental blur.
 
@@ -94,6 +98,7 @@ Exit demo:
 - See different issue lists when switching teams.
 - Refresh the detail URL and use browser back/forward without losing navigation state.
 - Submit a stale update and receive 409 rather than silently overwriting another edit.
+- Enable a two-week rolling schedule, see future cycles created, and verify unfinished issues roll into the next cycle exactly once.
 
 ## M3 — Projects
 
@@ -141,15 +146,16 @@ Exit demo:
 
 Scope:
 
-- Add comment edit/delete policy, mentions, sub-issues, watchers, and notification-producing collaboration events.
+- Add comment edit/delete policy, mentions, sub-issues, typed issue relationships, watchers, and notification-producing collaboration events.
 - Centralize workspace/team/resource authorization and cover it with a role/resource matrix.
-- Expand the M2 issue detail with comment actions, sub-issues, mentions, and notification controls.
+- Expand the M2 issue detail with comment actions, sub-issues, workspace-configurable relationships, mentions, and notification controls.
 
 Exit demo:
 
 - Two authorized users collaborate on one issue and see ordered activity.
 - Removing team access blocks future reads without erasing authored history.
 - A user cannot infer another team's issue by identifier, comment, event, or notification.
+- A parent shows child progress in the issue list; directional relationship labels reverse correctly, and dependency cycles are rejected.
 
 ## M6 — Saved views and Inbox
 

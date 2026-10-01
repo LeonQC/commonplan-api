@@ -7,12 +7,14 @@ from sqlalchemy.orm import Session
 
 from app.database import DbSession
 from app.models import (
+    AuditEvent,
     Team,
     TeamMembership,
     User,
     Workspace,
     WorkspaceInvitation,
     WorkspaceMembership,
+    WorkspaceSettings,
 )
 from app.repositories.errors import RepositoryConflictError
 
@@ -31,7 +33,10 @@ class WorkspaceRepository(Protocol):
     def delete_team_memberships_for_workspace(self, workspace_id: str, user_id: int) -> None: ...
     def other_active_owner_count(self, workspace_id: str, excluded_user_id: int) -> int: ...
     def invitation_by_hash(self, token_hash: str) -> WorkspaceInvitation | None: ...
+    def settings(self, workspace_id: str) -> WorkspaceSettings | None: ...
+    def audit_events(self, workspace_id: str, limit: int = 100) -> list[AuditEvent]: ...
     def add(self, record: object) -> None: ...
+    def flush(self) -> None: ...
     def delete(self, record: object) -> None: ...
     def save_changes(self) -> None: ...
     def refresh(self, record: object) -> None: ...
@@ -119,8 +124,22 @@ class SqlAlchemyWorkspaceRepository:
     def invitation_by_hash(self, token_hash: str) -> WorkspaceInvitation | None:
         return self.db.scalar(select(WorkspaceInvitation).where(WorkspaceInvitation.token_hash == token_hash))
 
+    def settings(self, workspace_id: str) -> WorkspaceSettings | None:
+        return self.db.get(WorkspaceSettings, workspace_id)
+
+    def audit_events(self, workspace_id: str, limit: int = 100) -> list[AuditEvent]:
+        return list(self.db.scalars(
+            select(AuditEvent)
+            .where(AuditEvent.workspace_id == workspace_id)
+            .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
+            .limit(limit)
+        ))
+
     def add(self, record: object) -> None:
         self.db.add(record)
+
+    def flush(self) -> None:
+        self.db.flush()
 
     def delete(self, record: object) -> None:
         self.db.delete(record)

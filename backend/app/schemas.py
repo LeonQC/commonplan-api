@@ -83,6 +83,35 @@ class WorkspaceRead(BaseModel):
     updated_at: datetime
 
 
+class WorkspaceSettingsUpdate(BaseModel):
+    allow_member_invites: bool | None = None
+    default_timezone: str | None = Field(default=None, min_length=1, max_length=64)
+    domain_policy: str | None = None
+
+
+class WorkspaceSettingsRead(BaseModel):
+    workspace_id: str
+    allow_member_invites: bool
+    default_timezone: str
+    domain_policy: str
+    updated_by_user_id: int | None
+    created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AuditEventRead(BaseModel):
+    id: str
+    workspace_id: str
+    actor_user_id: int | None
+    action: str
+    target_type: str
+    target_id: str | None
+    details: dict
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
 class TeamCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     issue_prefix: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9]{1,11}$")
@@ -167,7 +196,29 @@ class CycleRead(BaseModel):
     name: str
     starts_on: date
     ends_on: date
+    completed_at: datetime | None
     created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CycleSettingsUpdate(BaseModel):
+    enabled: bool | None = None
+    duration_weeks: int | None = Field(default=None, ge=1, le=8)
+    upcoming_cycle_count: int | None = Field(default=None, ge=1, le=15)
+    next_cycle_starts_on: date | None = None
+    rollover_incomplete: bool | None = None
+
+
+class CycleSettingsRead(BaseModel):
+    team_id: str
+    enabled: bool
+    duration_weeks: int
+    upcoming_cycle_count: int
+    next_cycle_starts_on: date | None
+    rollover_incomplete: bool
+    updated_by_user_id: int | None
+    created_at: datetime
+    updated_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -269,6 +320,56 @@ class IssueCollaborationRead(BaseModel):
     watching: bool
     watchers: list[IssueWatcherRead]
     sub_issues: list[IssueRead]
+
+
+class IssueRelationTypeCreate(BaseModel):
+    key: str = Field(min_length=2, max_length=64, pattern=r"^[a-z][a-z0-9_]*$")
+    forward_label: str = Field(min_length=2, max_length=120)
+    inverse_label: str = Field(min_length=2, max_length=120)
+    category: str = Field(default="custom", pattern=r"^(dependency|custom)$")
+    symmetric: bool = False
+    allow_cycles: bool = True
+
+
+class IssueRelationTypeRead(BaseModel):
+    id: str
+    workspace_id: str
+    key: str
+    forward_label: str
+    inverse_label: str
+    category: str
+    is_system: bool
+    symmetric: bool
+    allow_cycles: bool
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class IssueRelationCreate(BaseModel):
+    relation_type_id: str
+    target_issue_key: str = Field(min_length=2, max_length=32)
+    direction: str = Field(default="outgoing", pattern=r"^(outgoing|incoming)$")
+
+
+class IssueRelationRead(BaseModel):
+    id: str
+    relation_type_id: str
+    type_key: str
+    direction: str
+    label: str
+    related_issue: IssueRead
+    created_by_user_id: int
+    created_at: datetime
+
+
+class IssueRelationSummaryRead(BaseModel):
+    issue_key: str
+    relation_id: str
+    type_key: str
+    category: str
+    direction: str
+    label: str
+    related_issue_key: str
 
 
 class SavedViewCreate(BaseModel):
