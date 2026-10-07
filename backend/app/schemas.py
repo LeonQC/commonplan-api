@@ -585,6 +585,40 @@ class ProjectRead(BaseModel):
     updated_at: datetime
 
 
+class AttachmentInitiate(BaseModel):
+    filename: str = Field(min_length=1, max_length=255)
+    content_type: str = Field(min_length=1, max_length=255)
+    byte_size: int = Field(ge=1)
+    sha256: str | None = Field(default=None, min_length=64, max_length=64)
+
+
+class AttachmentRead(BaseModel):
+    id: str
+    workspace_id: str
+    uploaded_by_user_id: int | None
+    original_filename: str
+    content_type: str
+    byte_size: int
+    sha256: str | None
+    upload_status: str
+    scan_status: str
+    created_at: datetime
+    ready_at: datetime | None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AttachmentInitiated(BaseModel):
+    attachment: AttachmentRead
+    upload_url: str
+    upload_method: str = "PUT"
+    upload_headers: dict[str, str]
+
+
+class AttachmentDownload(BaseModel):
+    download_url: str
+    expires_in_seconds: int
+
+
 class TeamSummaryRead(BaseModel):
     scope: dict
     filters: dict

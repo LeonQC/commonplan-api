@@ -3,7 +3,7 @@
 This page is the clean implementation baseline for CommonPlan. It contains only the tables and columns that exist after applying the current migration heads:
 
 - Auth DB: `20260910_0002`
-- Business DB: `20260930_0016`
+- Business DB: `20261006_0017`
 
 `IMPLEMENTED` means the table exists in PostgreSQL and has an active SQLAlchemy runtime model. `PROPOSED` means the entity belongs to the target product design but has no migration yet.
 
@@ -91,6 +91,13 @@ erDiagram
     ISSUE_RELATION_TYPES ||--o{ ISSUE_RELATIONS : types
     ISSUES ||--o{ ISSUE_RELATIONS : source
     ISSUES ||--o{ ISSUE_RELATIONS : target
+    WORKSPACES ||--o{ FILE_ASSETS : scopes
+    USERS ||--o{ FILE_ASSETS : uploads
+    ISSUES ||--o{ ISSUE_ATTACHMENTS : has
+    FILE_ASSETS ||--o| ISSUE_ATTACHMENTS : links
+    PROJECTS ||--o{ PROJECT_ATTACHMENTS : has
+    FILE_ASSETS ||--o| PROJECT_ATTACHMENTS : links
+    FILE_ASSETS ||--o{ OUTBOX_EVENTS : emits
 
     USERS {
         integer id PK
@@ -239,6 +246,42 @@ erDiagram
         timestamptz created_at
         timestamptz updated_at
     }
+    FILE_ASSETS {
+        varchar_36 id PK
+        varchar_36 workspace_id FK
+        integer uploaded_by_user_id FK
+        varchar_255 original_filename
+        varchar_768 storage_key UK
+        varchar_255 content_type
+        bigint byte_size
+        varchar_64 sha256
+        varchar_24 upload_status
+        varchar_24 scan_status
+        timestamptz ready_at
+        timestamptz deleted_at
+    }
+    ISSUE_ATTACHMENTS {
+        varchar_36 issue_id PK, FK
+        varchar_36 file_asset_id PK, FK
+        integer added_by_user_id FK
+    }
+    PROJECT_ATTACHMENTS {
+        varchar_36 project_id PK, FK
+        varchar_36 file_asset_id PK, FK
+        integer added_by_user_id FK
+    }
+    OUTBOX_EVENTS {
+        varchar_36 id PK
+        varchar_36 workspace_id FK
+        varchar_64 aggregate_type
+        varchar_36 aggregate_id
+        varchar_120 event_type
+        jsonb payload
+        varchar_24 status
+        integer attempts
+        timestamptz available_at
+        timestamptz published_at
+    }
 ```
 
 The `(auth_issuer, auth_subject)` badges denote the partial composite unique index `ux_users_auth_identity`; neither column is independently unique. `browser_auth_sessions.auth_subject` logically refers to Auth `identity_users.id`, but PostgreSQL cannot enforce that cross-database relationship. It also has no direct foreign key to Business `users`.
@@ -274,6 +317,10 @@ The `(auth_issuer, auth_subject)` badges denote the partial composite unique ind
 | Business | `issue_events` | `IssueEvent` | Append-only issue change and collaboration history |
 | Business | `issue_relation_types` | `IssueRelationType` | Workspace-owned forward/inverse relationship vocabulary and cycle policy |
 | Business | `issue_relations` | `IssueRelation` | Authorized typed edges between issues in one workspace |
+| Business | `file_assets` | `FileAsset` | Private object metadata, lifecycle state, and workspace scope |
+| Business | `issue_attachments` | `IssueAttachment` | Foreign-key-safe link from one file asset to an issue |
+| Business | `project_attachments` | `ProjectAttachment` | Foreign-key-safe link from one file asset to a project |
+| Business | `outbox_events` | `OutboxEvent` | Durable lifecycle events for later scanning, indexing, and cleanup workers |
 
 ## Cross-database identity mapping
 
