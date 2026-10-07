@@ -1,6 +1,6 @@
 # CommonPlan data model and API design
 
-This package contains the implemented schema baseline and the target product schema. [00 — Current implemented schema](00-current-schema-map.md) reflects the current migration heads. Modules 01–06 translate the [16-page KEY-3 UI specification](https://github.com/wangd606/commonplan-web/blob/codex/KEY-14-import-web/output/pdf/KEY-3-zhitong-ui-design.pdf) into bounded contexts.
+This package contains the implemented schema baseline and the target product schema. [00 — Current implemented schema](00-current-schema-map.md) reflects the current migration heads. Modules 01–07 translate the product design into bounded contexts.
 
 Delivery order, exit criteria, and local verification are documented in the [CommonPlan implementation milestones](../implementation/milestones.md).
 
@@ -38,6 +38,7 @@ erDiagram
 | Team Summary, views and inbox | [04 — Team Summary, views, inbox](04-views-notifications.md) | 2, 3, 7 | Summary M4; views/inbox M6 |
 | GitHub PR linking | [05 — GitHub webhook](05-github-webhook.md) | 4, 14 | P1 |
 | Administration | [06 — Administration](06-administration.md) | 9–13, 15 | Core settings P0; advanced controls later |
+| Attachments and documents | [07 — Attachments](07-attachments.md) | Issue and project details | M9 |
 | Visual design system | No persistence | 1, 16 | Web-only |
 
 `P0` is the first useful multi-team product; `P1` completes the depicted collaboration loop. “Later” means the UI names a capability but does not yet specify enough behavior to justify a production table or endpoint.
@@ -62,6 +63,7 @@ Paths in this matrix omit the `/api/v1` prefix unless explicitly shown; the GitH
 | Personal timezone/default team/notification switches | `user_preferences`, `notification_preferences` | `PATCH /me/preferences`, notification-preference APIs |
 | Workspace profile and invite/domain rules | `workspaces`, `workspace_settings`, `workspace_allowed_domains` | `GET/PATCH .../settings`, allowed-domain APIs |
 | GitHub PR auto-linking | `github_pull_requests`, `issue_pr_links`, `github_webhook_deliveries` | Signed `POST /webhooks/github`, issue PR read API |
+| Issue and project documents | `file_assets`, typed link tables, `outbox_events` | Initiate/list/complete/download/delete attachment APIs |
 | SSO, API keys, billing, import/export, agent settings | Future bounded contexts, not implied by a visual menu | Separate specification before writable endpoints |
 
 ## Assumptions to confirm

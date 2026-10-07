@@ -25,8 +25,10 @@ This plan delivers CommonPlan as runnable vertical slices across the `commonplan
 | M6 — Saved views and Inbox | Reusable filters, My Issues, notifications, unread state | M4, M5 | Save a Summary/issue filter and receive actionable notifications |
 | M7 — GitHub integration | Signed webhook intake and PR-to-issue auto-linking by item key | M2, M5 | A PR title containing `KEY-12` appears on that issue without project mapping |
 | M8 — Settings and administration | Personal, connected-account, workspace, member, and domain settings | M1, M5 | Manage account/workspace settings with role checks and audit records |
-| M9 — Hardening and release | E2E coverage, pagination, concurrency, observability, deployment readiness | M1–M8 | Critical flows pass automatically and survive service restart |
-| M10 — AI foundation | Scoped agent identities, permissions, context, and execution audit | M9 | An agent performs an explicitly authorized work-item action with audit trail |
+| M9 — Attachments and document foundation | Secure Issue/Project uploads, private object storage, lifecycle events | M2, M3 | Upload, download, and remove an authorized attachment |
+| M10 — Hardening and release | E2E coverage, pagination, concurrency, observability, deployment readiness | M1–M9 | Critical flows pass automatically and survive service restart |
+| M11 — AI foundation | Scoped agent identities, permissions, context, and execution audit | M10 | An agent performs an explicitly authorized work-item action with audit trail |
+| M12 — RAG ingestion and retrieval | Async document extraction, chunking, indexing, scoped retrieval | M9, M11 | A ready document becomes searchable only inside its authorized scope |
 
 ## M0 — Platform baseline
 
@@ -205,7 +207,25 @@ Exit demo:
 - Connect/disconnect Google without removing the last usable login method.
 - Verify member, admin, and owner permissions plus last-owner protection.
 
-## M9 — Hardening and release
+## M9 — Attachments and document foundation
+
+Scope:
+
+- Add `file_assets`, `issue_attachments`, `project_attachments`, and a durable `outbox_events` boundary.
+- Store bytes outside PostgreSQL through a signed local-volume driver for development and a private S3-compatible driver for deployment; keep metadata and authorization scope in PostgreSQL.
+- Use short-lived signed upload/download URLs and recheck resource authorization for complete, download, and delete.
+- Add consistent attachment controls to Issue and Project details with progress, empty, error, ready, and delete states.
+- Emit `file.ready` and `file.deleted` without performing extraction or embedding inside the API request.
+
+Exit demo:
+
+- Upload a PDF to an Issue and a Markdown file to a Project, refresh, download both, and remove one.
+- Verify a user without Team access cannot list, complete, download, or delete the files.
+- Stop object storage and receive an explicit service error without corrupting file metadata.
+
+Known production gate: malware scanning and byte-level MIME detection are intentionally visible as not configured until a scanning worker is deployed.
+
+## M10 — Hardening and release
 
 Scope:
 
@@ -220,9 +240,13 @@ Exit demo:
 - Restart Redis, Business API, and Auth Service and verify expected recovery behavior.
 - Produce a release candidate with no undocumented public endpoint or unprotected Business route.
 
-## M10 — AI foundation
+## M11 — AI foundation
 
 Scope is intentionally deferred until concrete agent use cases are approved. The foundation must distinguish human and agent principals, use explicit scopes, record execution/audit metadata, and pass through the same workspace/team/resource authorization boundary. An AI integration must never gain ambient access merely because it runs inside CommonPlan.
+
+## M12 — RAG ingestion and retrieval
+
+Consume M9 outbox events asynchronously. Extract supported documents, record parser/version/checksum, chunk content, generate embeddings, and index them with workspace/team/resource ACL metadata. Retrieval must apply authorization before returning chunks; deleted files must cause index tombstones. Keep ingestion retryable and observable, and never make upload success depend on model or vector-store availability.
 
 ## Verification loop for every milestone
 

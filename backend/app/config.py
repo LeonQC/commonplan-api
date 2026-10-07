@@ -27,6 +27,18 @@ class Settings(BaseSettings):
     github_allowed_owner_login: str = ""
     github_workspace_id: str = ""
     github_hook_id: int | None = None
+    object_storage_driver: Literal["local", "s3"] = "local"
+    object_storage_local_path: str = "/var/lib/commonplan/attachments"
+    object_storage_local_public_url: str = "http://localhost:8000"
+    object_storage_signing_secret: str = "local-dev-file-signing-change-me"
+    object_storage_endpoint: str = "https://s3.amazonaws.com"
+    object_storage_public_endpoint: str = "https://s3.amazonaws.com"
+    object_storage_region: str = "us-east-1"
+    object_storage_bucket: str = "commonplan-attachments"
+    object_storage_access_key: str = "commonplan"
+    object_storage_secret_key: str = "commonplan-local-secret"
+    attachment_upload_max_bytes: int = 25 * 1024 * 1024
+    attachment_url_ttl_seconds: int = 15 * 60
 
     @model_validator(mode="after")
     def validate_cookie_settings(self) -> "Settings":

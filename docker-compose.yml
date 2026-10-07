@@ -129,6 +129,18 @@ services:
       GITHUB_ALLOWED_OWNER_LOGIN: ${GITHUB_ALLOWED_OWNER_LOGIN:-}
       GITHUB_WORKSPACE_ID: ${GITHUB_WORKSPACE_ID:-}
       GITHUB_HOOK_ID: ${GITHUB_HOOK_ID:-}
+      OBJECT_STORAGE_DRIVER: ${OBJECT_STORAGE_DRIVER:-local}
+      OBJECT_STORAGE_LOCAL_PATH: /var/lib/commonplan/attachments
+      OBJECT_STORAGE_LOCAL_PUBLIC_URL: ${OBJECT_STORAGE_LOCAL_PUBLIC_URL:-http://localhost:8000}
+      OBJECT_STORAGE_SIGNING_SECRET: ${OBJECT_STORAGE_SIGNING_SECRET:-local-dev-file-signing-change-me}
+      OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-https://s3.amazonaws.com}
+      OBJECT_STORAGE_PUBLIC_ENDPOINT: ${OBJECT_STORAGE_PUBLIC_ENDPOINT:-https://s3.amazonaws.com}
+      OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-us-east-1}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-commonplan-attachments}
+      OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:-commonplan}
+      OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:-commonplan-local-secret}
+      ATTACHMENT_UPLOAD_MAX_BYTES: ${ATTACHMENT_UPLOAD_MAX_BYTES:-26214400}
+      ATTACHMENT_URL_TTL_SECONDS: ${ATTACHMENT_URL_TTL_SECONDS:-900}
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     ports:
       - "8000:8000"
@@ -136,6 +148,7 @@ services:
       - ./backend/app:/app/app
       - ./backend/alembic:/app/alembic
       - ./backend/alembic.ini:/app/alembic.ini
+      - attachment_data:/var/lib/commonplan/attachments
     depends_on:
       backend-migrate:
         condition: service_completed_successfully
@@ -145,3 +158,4 @@ services:
 volumes:
   postgres_data:
   auth_signing_keys:
+  attachment_data:

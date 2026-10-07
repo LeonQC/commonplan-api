@@ -20,6 +20,8 @@ from app.summary_routes import router as summary_router
 from app.collaboration_routes import router as collaboration_router
 from app.view_notification_routes import router as view_notification_router
 from app.github_routes import router as github_router, webhook_router as github_webhook_router
+from app.attachment_routes import router as attachment_router
+from app.storage_routes import router as storage_router
 
 
 @asynccontextmanager
@@ -45,6 +47,7 @@ business_router.include_router(summary_router)
 business_router.include_router(collaboration_router)
 business_router.include_router(view_notification_router)
 business_router.include_router(github_router)
+business_router.include_router(attachment_router)
 
 
 @app.exception_handler(SessionStoreUnavailable)
@@ -132,4 +135,5 @@ def delete_user(
 
 app.include_router(auth_router)
 app.include_router(github_webhook_router)
+app.include_router(storage_router)
 app.include_router(business_router)
