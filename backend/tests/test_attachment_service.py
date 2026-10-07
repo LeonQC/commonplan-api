@@ -81,8 +81,9 @@ def test_issue_attachment_upload_complete_download_delete_and_outbox(context):
     storage.objects[asset.storage_key] = StoredObject(2048, "application/pdf")
     completed = service.complete(owner, workspace.id, asset.id)
     assert completed.upload_status == "ready"
+    assert service.complete(owner, workspace.id, asset.id).id == completed.id
     assert "architecture.pdf" in service.download_url(owner, workspace.id, asset.id)
-    assert db.scalars(select(OutboxEvent).where(OutboxEvent.event_type == "file.ready")).one()
+    assert len(list(db.scalars(select(OutboxEvent).where(OutboxEvent.event_type == "file.ready")))) == 1
 
     service.delete(owner, workspace.id, asset.id)
     assert service.list_issue(owner, workspace.id, issue.key) == []
