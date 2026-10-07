@@ -1,4 +1,11 @@
-# Zhitong system architecture
+# CommonPlan system architecture
+
+The canonical current-state overview is available as a
+[visual architecture design](architecture/commonplan-current-architecture.md). The sections below
+provide the detailed trust boundaries and request sequences behind that overview.
+
+The [target full-system architecture](architecture/commonplan-target-architecture.md) documents the
+recommended production topology, true BFF separation, and staged AI/RAG extension.
 
 ## Service and trust boundaries
 

@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CommonPlan — Current System Architecture</title>
+  <style>
+    :root {
+      --ink: #202332;
+      --muted: #717587;
+      --line: #d9dce8;
+      --paper: #ffffff;
+      --violet: #6558e8;
+      --violet-soft: #f0efff;
+      --blue: #3975dc;
+      --blue-soft: #edf4ff;
+      --teal: #168578;
+      --teal-soft: #eaf8f5;
+      --amber: #9a6812;
+      --amber-soft: #fff7df;
+      --rose: #b64f63;
+      --rose-soft: #fff0f3;
+      --slate-soft: #f3f5f9;
+      --shadow: 0 18px 50px rgba(42, 45, 67, .08);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-width: 1600px; min-height: 1240px; background: #f7f8fc; color: var(--ink); font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { padding: 52px 58px 62px; }
+    main { width: 1484px; margin: 0 auto; }
+    header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 28px; }
+    .eyebrow { display: block; margin-bottom: 10px; color: var(--violet); font-size: 13px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+    h1 { margin: 0; font-size: 35px; letter-spacing: -.035em; }
+    header p { margin: 10px 0 0; color: var(--muted); font-size: 15px; }
+    .meta { display: grid; gap: 6px; text-align: right; color: var(--muted); font-size: 12px; }
+    .meta strong { color: var(--ink); font-size: 13px; }
+    .diagram { position: relative; width: 1484px; height: 940px; overflow: hidden; border: 1px solid #e1e3ec; border-radius: 24px; background: var(--paper); box-shadow: var(--shadow); }
+    .diagram::before { content: ""; position: absolute; inset: 0; background-image: radial-gradient(#dfe1ea 1px, transparent 1px); background-size: 22px 22px; opacity: .38; }
+    .layer { position: absolute; left: 20px; width: 88px; display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: center; color: #9699a8; font-size: 10px; font-weight: 760; letter-spacing: .08em; text-transform: uppercase; }
+    .layer b { width: 22px; height: 22px; display: grid; place-items: center; border: 1px solid #d9dce6; border-radius: 50%; background: white; color: #777b8d; font-size: 9px; }
+    .l1 { top: 68px; } .l2 { top: 228px; } .l3 { top: 514px; } .l4 { top: 748px; } .l5 { top: 883px; }
+    .card { position: absolute; z-index: 2; border: 1px solid; border-radius: 16px; background: white; box-shadow: 0 10px 24px rgba(49, 52, 75, .06); }
+    .card h2, .card h3 { margin: 0; letter-spacing: -.015em; }
+    .card p { margin: 7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.48; }
+    .implemented { position: absolute; top: 13px; right: 14px; padding: 4px 7px; border-radius: 999px; background: rgba(255,255,255,.72); color: inherit; font-size: 8px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .client { left: 450px; top: 42px; width: 570px; min-height: 104px; padding: 22px 26px; border-color: #8f86f4; background: var(--violet-soft); color: #4d41c7; text-align: center; }
+    .client h2 { font-size: 17px; }
+    .client .chips { justify-content: center; }
+    .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 12px; }
+    .chip { padding: 4px 7px; border: 1px solid rgba(85, 80, 130, .13); border-radius: 999px; background: rgba(255,255,255,.7); color: #66697a; font-size: 8px; font-weight: 690; }
+    .api { left: 190px; top: 196px; width: 1090px; min-height: 244px; padding: 20px 22px 22px; border-color: #6ca0eb; background: var(--blue-soft); color: #255cad; }
+    .api-head { display: flex; align-items: baseline; gap: 12px; padding: 0 4px 15px; }
+    .api-head h2 { font-size: 18px; }
+    .api-head span { color: #7691bb; font-size: 10px; }
+    .modules { display: grid; grid-template-columns: .86fr 1fr 1.5fr 1fr; gap: 10px; }
+    .module { min-height: 154px; padding: 15px; border: 1px solid rgba(57,117,220,.2); border-radius: 11px; background: rgba(255,255,255,.72); color: var(--ink); }
+    .module h3 { color: #385d9c; font-size: 12px; }
+    .module p { font-size: 9px; }
+    .module ul { display: grid; gap: 5px; margin: 11px 0 0; padding: 0; list-style: none; color: #646a7c; font-size: 8px; line-height: 1.3; }
+    .module li::before { content: "·"; margin-right: 5px; color: var(--blue); font-weight: 900; }
+    .auth { left: 488px; top: 500px; width: 500px; min-height: 174px; padding: 21px 24px; border-color: #49a99d; background: var(--teal-soft); color: #0f6e64; }
+    .auth h2 { font-size: 17px; }
+    .auth-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+    .auth-grid div { padding: 10px; border-radius: 9px; background: rgba(255,255,255,.7); color: #456f6c; font-size: 9px; line-height: 1.45; }
+    .external { position: absolute; z-index: 2; width: 184px; padding: 14px 15px; border: 1px dashed; border-radius: 13px; background: white; }
+    .external strong { display: block; font-size: 11px; }
+    .external span { display: block; margin-top: 5px; color: var(--muted); font-size: 8px; line-height: 1.35; }
+    .github { left: 1280px; top: 236px; border-color: #d28a96; background: var(--rose-soft); color: #9e4153; }
+    .google { left: 1080px; top: 528px; border-color: #d8ae52; background: var(--amber-soft); color: #876014; }
+    .store { top: 726px; min-height: 112px; padding: 17px 18px; border-color: #c8ccd9; background: var(--slate-soft); color: #424657; }
+    .store h3 { font-size: 12px; }
+    .store p { font-size: 8px; }
+    .business-db { left: 122px; width: 320px; }
+    .redis { left: 466px; width: 250px; }
+    .auth-db { left: 760px; width: 320px; border-color: #9ad0c9; background: #f0faf8; }
+    .keys { left: 1104px; width: 238px; border-color: #c7c1f5; background: #f5f3ff; }
+    .repo-note { position: absolute; z-index: 2; left: 122px; top: 861px; width: 1220px; height: 50px; display: flex; align-items: center; justify-content: center; gap: 9px; border: 1px solid #d9dce7; border-radius: 11px; background: #fafbfe; color: #666b7d; font-size: 10px; }
+    .repo-note strong { color: #434758; }
+    .future { position: absolute; z-index: 2; left: 1362px; top: 726px; width: 92px; height: 185px; display: grid; place-items: center; padding: 8px; border: 1px dashed #bbb4f0; border-radius: 12px; background: #faf9ff; color: #746bc2; font-size: 8px; line-height: 1.35; text-align: center; writing-mode: vertical-rl; transform: rotate(180deg); }
+    svg.edges { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; overflow: visible; }
+    .edge { fill: none; stroke: #a7abb9; stroke-width: 1.6; marker-end: url(#arrow); }
+    .edge.auth-edge { stroke: #4d9a91; }
+    .edge.data-edge { stroke: #788097; }
+    .edge.external-edge { stroke-dasharray: 6 6; }
+    .edge.future-edge { stroke: #8e85dc; stroke-dasharray: 5 6; }
+    .edge-label { fill: #7b7f90; font-size: 9px; font-weight: 620; paint-order: stroke; stroke: white; stroke-width: 5px; stroke-linejoin: round; }
+    footer { display: flex; justify-content: space-between; gap: 30px; margin-top: 22px; }
+    .invariants { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .invariant { min-height: 82px; padding: 13px 14px; border: 1px solid #e0e2ea; border-radius: 12px; background: white; }
+    .invariant b { display: block; margin-bottom: 5px; color: var(--violet); font-size: 10px; }
+    .invariant span { color: #6c7080; font-size: 9px; line-height: 1.45; }
+    .legend { width: 264px; display: grid; align-content: center; gap: 8px; padding: 13px 16px; border: 1px solid #e0e2ea; border-radius: 12px; background: white; color: #696d7d; font-size: 9px; }
+    .legend i { display: inline-block; width: 24px; margin-right: 7px; border-top: 2px solid #8c91a2; vertical-align: middle; }
+    .legend i.dashed { border-top-style: dashed; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div><span class="eyebrow">KEY-7 · Code-backed architecture</span><h1>CommonPlan · Current System Architecture</h1><p>Implemented deployment, trust, persistence, and integration boundaries after M1–M8.</p></div>
+      <div class="meta"><strong>Current state · October 2026</strong><span>Source: commonplan-api + commonplan-web master</span><span>Not a future-state RAG diagram</span></div>
+    </header>
+
+    <section class="diagram">
+      <div class="layer l1"><b>01</b><span>Client</span></div>
+      <div class="layer l2"><b>02</b><span>API edge</span></div>
+      <div class="layer l3"><b>03</b><span>Identity</span></div>
+      <div class="layer l4"><b>04</b><span>State</span></div>
+      <div class="layer l5"><b>05</b><span>Boundary</span></div>
+
+      <svg class="edges" viewBox="0 0 1484 940" aria-hidden="true">
+        <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#9ca1b1" /></marker></defs>
+        <path class="edge" d="M735 146 L735 196" /><text class="edge-label" x="748" y="176">HTTPS · access JWT in memory</text>
+        <path class="edge auth-edge" d="M735 440 L735 500" /><text class="edge-label" x="749" y="475">internal auth calls · JWKS</text>
+        <path class="edge data-edge" d="M500 440 C500 610 282 610 282 726" /><text class="edge-label" x="302" y="640">domain read / write</text>
+        <path class="edge data-edge" d="M630 440 C630 610 591 610 591 726" /><text class="edge-label" x="600" y="646">session cache</text>
+        <path class="edge auth-edge" d="M690 674 C690 700 920 690 920 726" /><text class="edge-label" x="785" y="706">identity + token ledger</text>
+        <path class="edge auth-edge" d="M850 674 C850 700 1222 690 1222 726" /><text class="edge-label" x="1080" y="706">RS256 keys</text>
+        <path class="edge external-edge" d="M1280 286 C1230 286 1215 310 1190 310" /><text class="edge-label" x="1204" y="273">signed webhook</text>
+        <path class="edge external-edge" d="M1080 574 L988 574" /><text class="edge-label" x="1000" y="560">OAuth / OIDC</text>
+        <path class="edge future-edge" d="M1280 400 C1420 430 1410 650 1408 726" />
+      </svg>
+
+      <article class="card client"><span class="implemented">Implemented</span><h2>React Web App</h2><p>React 19 · Vite · browser UI at :5173</p><div class="chips"><span class="chip">Workspaces & Teams</span><span class="chip">Issues & Cycles</span><span class="chip">Projects & Summary</span><span class="chip">Views & Inbox</span><span class="chip">Settings</span></div></article>
+
+      <article class="card api">
+        <span class="implemented">Single deployable · :8000</span>
+        <div class="api-head"><h2>FastAPI Business API + Web BFF</h2><span>Browser-facing entrypoint and product resource server</span></div>
+        <div class="modules">
+          <section class="module"><h3>Public entrypoints</h3><p>Explicitly public routes only.</p><ul><li>/auth/* BFF routes</li><li>/webhooks/github</li><li>/health</li></ul></section>
+          <section class="module"><h3>Security pipeline</h3><p>Fail closed before business logic.</p><ul><li>RS256 JWT + cached JWKS</li><li>Issuer / audience / client checks</li><li>Workspace & Team policies</li></ul></section>
+          <section class="module"><h3>Product modules</h3><p>One modular monolith, not microservices.</p><ul><li>Workspace, Team, membership</li><li>Issues, Cycles, Projects, Summary</li><li>Collaboration, Views, Inbox</li><li>GitHub PR key matching</li></ul></section>
+          <section class="module"><h3>Persistence boundary</h3><p>Services never receive a DB session.</p><ul><li>Service / operator layer</li><li>Repository protocols</li><li>SQLAlchemy implementations</li></ul></section>
+        </div>
+      </article>
+
+      <article class="card auth"><span class="implemented">Independent deployable · :8001</span><h2>CommonPlan Auth Service</h2><p>First-party identity authority; Google is an upstream provider, not the API token issuer.</p><div class="auth-grid"><div><strong>Identity</strong><br />Email/password · Google linking · Argon2 · login throttling</div><div><strong>Tokens</strong><br />RS256 access JWT · JWKS · rotating opaque refresh families</div></div></article>
+
+      <aside class="external github"><strong>GitHub</strong><span>Organization/repository webhook. PR titles containing an issue key link automatically. smee forwards events only in local development.</span></aside>
+      <aside class="external google"><strong>Google OAuth / OIDC</strong><span>Authorization-code identity flow. Client secret and token exchange remain server-side.</span></aside>
+
+      <article class="card store business-db"><h3>Business PostgreSQL · zhitong</h3><p>Product entities · profile projection · encrypted BFF refresh vault · durable application sessions · PR snapshots and webhook dedupe</p></article>
+      <article class="card store redis"><h3>Redis 7</h3><p>Disposable read-through cache for application sessions. Never an authentication authority.</p></article>
+      <article class="card store auth-db"><h3>Auth PostgreSQL · zhitong_auth</h3><p>Identity users · password hashes · provider subjects · refresh-token hashes/families · login attempts</p></article>
+      <article class="card store keys"><h3>RSA key volume</h3><p>Private signing key stays inside Auth Service; public parameters are exposed through JWKS.</p></article>
+
+      <div class="repo-note"><strong>Enforced code boundary</strong><span>Routes → services/operators → repository protocols → SQLAlchemy → PostgreSQL · AST tests reject DB access outside repositories.</span></div>
+      <div class="future">Future AI / RAG extension seam · not implemented in current state</div>
+    </section>
+
+    <footer>
+      <div class="invariants">
+        <div class="invariant"><b>Browser custody</b><span>Short-lived access JWT in memory; opaque HttpOnly BFF session cookie; no raw refresh token.</span></div>
+        <div class="invariant"><b>Authentication</b><span>Auth Service proves identity. Every protected Business API route verifies the access JWT.</span></div>
+        <div class="invariant"><b>Authorization</b><span>Business API evaluates workspace, Team, role, and resource policies after authentication.</span></div>
+        <div class="invariant"><b>Data ownership</b><span>Auth and product state use separate databases and independent Alembic histories.</span></div>
+      </div>
+      <div class="legend"><span><i></i> Synchronous / owned data flow</span><span><i class="dashed"></i> External or optional integration</span><span>All colored boxes are implemented unless marked future.</span></div>
+    </footer>
+  </main>
+</body>
+</html>

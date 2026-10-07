@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CommonPlan — Target Full-System Architecture</title>
+  <style>
+    :root {
+      --ink:#202332; --muted:#6f7485; --line:#dfe3ec; --paper:#ffffff;
+      --violet:#6558e8; --violetSoft:#f2f0ff; --blue:#3975dc; --blueSoft:#edf4ff;
+      --teal:#148579; --tealSoft:#eaf8f5; --amber:#a36a11; --amberSoft:#fff6de;
+      --rose:#ad4d62; --roseSoft:#fff0f3; --slate:#f4f6fa;
+    }
+    * { box-sizing:border-box; }
+    html,body { margin:0; min-width:1600px; min-height:1360px; background:#f7f8fc; color:var(--ink); font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    body { padding:46px 58px 50px; }
+    main { width:1484px; margin:0 auto; }
+    header { display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:24px; }
+    .eyebrow { display:block; margin-bottom:9px; color:var(--violet); font-size:13px; font-weight:800; letter-spacing:.16em; text-transform:uppercase; }
+    h1 { margin:0; font-size:35px; letter-spacing:-.035em; }
+    header p { margin:9px 0 0; color:var(--muted); font-size:14px; }
+    .meta { display:grid; gap:5px; text-align:right; color:var(--muted); font-size:11px; }
+    .meta strong { color:var(--ink); font-size:13px; }
+
+    .diagram { width:1484px; padding:20px; border:1px solid #e1e4ed; border-radius:24px; background:var(--paper); box-shadow:0 18px 50px rgba(42,45,67,.08); }
+    .lane { position:relative; padding:18px 20px 20px 112px; border:1px solid #e5e7ef; border-radius:17px; background:#fcfcfe; }
+    .lane + .lane { margin-top:14px; }
+    .lane-label { position:absolute; left:20px; top:20px; width:72px; color:#8f94a6; font-size:9px; font-weight:800; letter-spacing:.1em; line-height:1.45; text-transform:uppercase; }
+    .lane-label b { display:grid; place-items:center; width:23px; height:23px; margin-bottom:8px; border:1px solid #d9dde7; border-radius:50%; background:white; color:#73798c; font-size:9px; }
+    .lane-title { margin:0 0 4px; font-size:12px; color:#34394a; }
+    .lane-subtitle { margin:0 0 14px; color:#7c8191; font-size:9px; }
+
+    .flow { display:flex; align-items:stretch; }
+    .flow-arrow { position:relative; flex:0 0 45px; align-self:center; height:2px; margin:0 7px; background:#a8adbc; }
+    .flow-arrow::after { content:""; position:absolute; right:-1px; top:-4px; border-left:8px solid #a8adbc; border-top:5px solid transparent; border-bottom:5px solid transparent; }
+    .flow-arrow span { position:absolute; left:50%; bottom:9px; width:86px; transform:translateX(-50%); color:#7c8192; font-size:7px; font-weight:700; text-align:center; }
+    .flow-arrow.dashed { height:0; border-top:2px dashed #978bea; background:transparent; }
+    .flow-arrow.dashed::after { border-left-color:#978bea; top:-6px; }
+
+    .card { position:relative; border:1px solid; border-radius:13px; background:white; box-shadow:0 7px 16px rgba(47,51,73,.045); }
+    .card h2,.card h3 { margin:0; letter-spacing:-.015em; }
+    .card p { margin:6px 0 0; color:var(--muted); font-size:8px; line-height:1.45; }
+    .badge { position:absolute; right:10px; top:9px; padding:3px 6px; border-radius:999px; background:rgba(255,255,255,.82); font-size:6.5px; font-weight:830; letter-spacing:.08em; text-transform:uppercase; }
+    .existing { color:#2864bd; } .planned { color:#91600f; } .proposed { color:#675bc8; } .managed { color:#607087; }
+
+    .runtime { min-height:277px; }
+    .runtime .node { width:245px; min-height:112px; padding:17px 17px 15px; }
+    .runtime .node h2 { font-size:15px; }
+    .runtime .browser { border-color:#9188f3; background:var(--violetSoft); color:#4e42c6; }
+    .runtime .edge { border-color:#9eb6db; background:#f3f7fd; color:#42628f; }
+    .runtime .bff { border-color:#dfb357; background:var(--amberSoft); color:#865a0f; }
+    .runtime .core { width:278px; border-color:#74a4e9; background:var(--blueSoft); color:#2b60aa; }
+    .runtime-note { display:grid; grid-template-columns:245px 245px 245px 278px; gap:59px; margin-top:14px; }
+    .mini { position:relative; min-height:64px; padding:11px 13px; border:1px dashed; border-radius:11px; background:white; }
+    .mini strong { display:block; font-size:9px; }
+    .mini span { display:block; margin-top:4px; color:var(--muted); font-size:7.5px; line-height:1.35; }
+    .empty { border-color:transparent; background:transparent; }
+    .google { border-color:#d7ab4d; background:#fffaf0; color:#825d14; }
+    .google::after { content:""; position:absolute; right:-59px; top:31px; width:58px; border-top:1.5px dashed #8e94a6; }
+    .google::before { content:""; position:absolute; right:-60px; top:27px; border-left:7px solid #8e94a6; border-top:4px solid transparent; border-bottom:4px solid transparent; }
+    .auth { border-color:#60aba2; background:var(--tealSoft); color:#126f66; }
+    .github { border-color:#d68b99; background:var(--roseSoft); color:#994052; }
+    .up-link { position:absolute; left:50%; top:-15px; height:14px; border-left:1.5px dashed #8e94a6; }
+    .up-link::before { content:""; position:absolute; left:-4px; top:-1px; border-bottom:7px solid #8e94a6; border-left:4px solid transparent; border-right:4px solid transparent; }
+
+    .ownership { min-height:250px; }
+    .owner-grid { display:grid; grid-template-columns:1fr 1.15fr 1fr; gap:16px; }
+    .owner { padding:14px; border:1px solid #dfe3ec; border-radius:14px; background:white; }
+    .owner-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:11px; }
+    .owner-head strong { font-size:11px; }
+    .owner-head span { color:#828798; font-size:7.5px; }
+    .stores { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+    .store { min-height:83px; padding:11px 12px; border:1px solid #cbd1df; border-radius:10px; background:var(--slate); }
+    .store h3 { font-size:9px; color:#414758; }
+    .store p { font-size:7.3px; }
+    .owner.bff-owner { border-top:3px solid #d8a745; }
+    .owner.core-owner { border-top:3px solid #5d94df; }
+    .owner.auth-owner { border-top:3px solid #48a095; }
+    .core-owner .store { background:#f3f7ff; border-color:#aac6ed; }
+    .auth-owner .store { background:#f1faf8; border-color:#a7d5cf; }
+    .ownership-rule { margin:12px 0 0; padding:9px 12px; border-radius:9px; background:#f6f7fa; color:#666c7e; font-size:8px; text-align:center; }
+    .ownership-rule strong { color:#414758; }
+
+    .future { min-height:365px; background:#fbfaff; border-color:#e1def9; }
+    .future .node { min-height:88px; padding:14px 15px; border-color:#a79eed; background:#f5f3ff; color:#5d52bc; }
+    .future .node h2 { font-size:13px; }
+    .future .queue { border-style:dashed; border-color:#d1a04a; background:#fffaf0; color:#8c6117; }
+    .future .core-source { border-color:#81aae6; background:#f0f6ff; color:#2e65ae; }
+    .future .llm { border-style:dashed; }
+    .future .flow-arrow { flex-basis:40px; margin:0 7px; }
+    .pipeline { display:grid; grid-template-columns:92px 1fr; gap:14px; align-items:center; }
+    .pipeline + .pipeline { margin-top:13px; padding-top:13px; border-top:1px solid #e5e1fb; }
+    .pipeline-label { color:#7167c7; font-size:8px; font-weight:820; letter-spacing:.08em; line-height:1.45; text-transform:uppercase; }
+    .pipeline-label span { display:block; margin-top:4px; color:#9094a5; font-size:7px; font-weight:600; letter-spacing:0; text-transform:none; }
+    .ingest-source { width:235px; }
+    .ingest-queue { width:230px; }
+    .ingest-worker { width:250px; }
+    .ingest-corpus { width:300px; }
+    .online-flow .core-source { width:205px; }
+    .online-flow .rag-service { width:625px; }
+    .online-flow .llm { width:255px; }
+    .rag-steps { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-top:9px; }
+    .rag-steps span { padding:7px 6px; border:1px solid #d5cff7; border-radius:8px; background:white; color:#5f57a1; font-size:7px; font-weight:720; line-height:1.3; text-align:center; }
+    .rag-foot { margin-top:7px !important; color:#716b91 !important; font-size:7px !important; }
+
+    .platform { min-height:145px; }
+    .platform-grid { display:grid; grid-template-columns:1fr 1.3fr 1fr; gap:14px; }
+    .platform-card { position:relative; min-height:78px; padding:13px 14px; border:1px solid #d5dae5; border-radius:11px; background:#f9fafe; }
+    .platform-card h3 { margin:0; font-size:10px; color:#4b5265; }
+    .platform-card p { margin:6px 0 0; color:var(--muted); font-size:7.5px; line-height:1.45; }
+
+    footer { display:flex; justify-content:space-between; gap:14px; margin-top:16px; }
+    .principles { flex:1; display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+    .principle { min-height:72px; padding:11px 12px; border:1px solid #e0e3eb; border-radius:10px; background:white; }
+    .principle b { display:block; margin-bottom:4px; color:var(--violet); font-size:8.5px; }
+    .principle span { color:#6b7081; font-size:7.5px; line-height:1.4; }
+    .legend { width:270px; display:grid; align-content:center; gap:6px; padding:11px 14px; border:1px solid #e0e3eb; border-radius:10px; background:white; color:#676c7d; font-size:7.5px; }
+    .legend-row { display:flex; gap:5px; }
+    .key { padding:3px 6px; border-radius:999px; font-size:6.5px; font-weight:760; }
+    .key.ex { background:var(--blueSoft); color:#2f67bc; } .key.pl { background:var(--amberSoft); color:#906112; } .key.pr { background:var(--violetSoft); color:#6256c5; } .key.ma { background:var(--slate); color:#5d677b; }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div><span class="eyebrow">KEY-7 · Target architecture</span><h1>CommonPlan · Expected Full-System Picture</h1><p>A layered production view: request path, service-owned data, staged AI/RAG, and deployment foundation.</p></div>
+    <div class="meta"><strong>Target state · deployment view</strong><span>Read each lane from left to right</span><span>Planned and proposed components are explicitly labelled</span></div>
+  </header>
+
+  <section class="diagram">
+    <section class="lane runtime">
+      <div class="lane-label"><b>01</b>Request plane</div>
+      <h2 class="lane-title">Browser request path</h2><p class="lane-subtitle">The browser has one public origin; private services are reached through the BFF.</p>
+      <div class="flow">
+        <article class="card node browser"><span class="badge existing">Existing</span><h2>React Web App</h2><p>Static SPA. After BFF migration, JavaScript holds neither access nor refresh tokens.</p></article>
+        <div class="flow-arrow"><span>HTTPS assets</span></div>
+        <article class="card node edge"><span class="badge managed">Managed</span><h2>CDN + Ingress</h2><p>TLS, static hosting, request limits, and path routing under one public origin.</p></article>
+        <div class="flow-arrow"><span>secure cookie</span></div>
+        <article class="card node bff"><span class="badge planned">Planned split</span><h2>Web BFF</h2><p>Browser-facing backend: CSRF, session cookie, server-side refresh, and API proxy.</p></article>
+        <div class="flow-arrow"><span>Bearer JWT</span></div>
+        <article class="card node core"><span class="badge existing">Existing core</span><h2>Business API</h2><p>Workspace and team authorization; issues, projects, cycles, views, inbox, summary, and GitHub linking.</p></article>
+      </div>
+      <div class="runtime-note">
+        <div class="mini empty"></div>
+        <div class="mini google"><strong>Google OAuth / OIDC</strong><span>External identity provider. Redirects return through the public edge.</span></div>
+        <div class="mini auth"><span class="up-link"></span><strong>Auth Service</strong><span>Password and Google identities · RS256 JWT · JWKS · refresh rotation and replay defense.</span></div>
+        <div class="mini github"><span class="up-link"></span><strong>GitHub</strong><span>Signed workspace-level webhook. PR title containing an item key creates the link.</span></div>
+      </div>
+    </section>
+
+    <section class="lane ownership">
+      <div class="lane-label"><b>02</b>Data ownership</div>
+      <h2 class="lane-title">Each deployable owns its persistence boundary</h2><p class="lane-subtitle">No service reaches into another service's database; application SQL remains inside repositories.</p>
+      <div class="owner-grid">
+        <article class="owner bff-owner"><div class="owner-head"><strong>Web BFF</strong><span>browser session boundary</span></div><div class="stores"><div class="store"><h3>BFF Session Store</h3><p>Opaque sessions and encrypted refresh-token custody.</p></div><div class="store"><h3>Managed Redis</h3><p>Session cache, CSRF state, rate limits, and short-lived cache.</p></div></div></article>
+        <article class="owner core-owner"><div class="owner-head"><strong>Business API</strong><span>product source of truth</span></div><div class="stores"><div class="store"><h3>Business PostgreSQL</h3><p>Workspaces, teams, projects, issues, cycles, views, inbox, audit, and GitHub records.</p></div><div class="store"><h3>Object Storage</h3><p>Versioned attachments and parsed artifacts through signed paths.</p></div></div></article>
+        <article class="owner auth-owner"><div class="owner-head"><strong>Auth Service</strong><span>identity source of truth</span></div><div class="stores"><div class="store"><h3>Auth PostgreSQL</h3><p>Identities, credentials, refresh families, login codes, and security events.</p></div><div class="store"><h3>Signing Keys / KMS</h3><p>Rotating JWT keys plus OAuth and encryption secrets.</p></div></div></article>
+      </div>
+      <p class="ownership-rule"><strong>Boundary:</strong> Auth owns identity · Core owns authorization · BFF owns browser-session custody · repositories own SQL.</p>
+    </section>
+
+    <section class="lane future">
+      <div class="lane-label"><b>03</b>Async + AI</div>
+      <h2 class="lane-title">AI / RAG platform: indexing and retrieval</h2><p class="lane-subtitle">Two execution planes share the retrieval corpus and model gateway: asynchronous indexing plus low-latency, permission-aware retrieval.</p>
+
+      <div class="pipeline">
+        <div class="pipeline-label">Ingestion<span>offline path</span></div>
+        <div class="flow ingest-flow">
+          <article class="card node core-source ingest-source"><span class="badge existing">Existing source</span><h2>Business API</h2><p>Commits attachment metadata and publishes durable indexing work.</p></article>
+          <div class="flow-arrow dashed"><span>index job</span></div>
+          <article class="card node queue ingest-queue"><span class="badge proposed">Technology TBD</span><h2>Event Bus / Queue</h2><p>Retries, dead letters, deduplication, and back-pressure.</p></article>
+          <div class="flow-arrow dashed"><span>consume</span></div>
+          <article class="card node ingest-worker"><span class="badge proposed">Proposed</span><h2>Ingestion Workers</h2><p>Load object · parse · normalize · chunk · call shared embedding gateway · version · index.</p></article>
+          <div class="flow-arrow dashed"><span>upsert</span></div>
+          <article class="card node ingest-corpus"><span class="badge proposed">Proposed corpus</span><h2>Retrieval Corpus</h2><p>Object Storage for artifacts · PostgreSQL full-text + pgvector for chunks, ACL metadata, and embedding vectors.</p></article>
+        </div>
+      </div>
+
+      <div class="pipeline">
+        <div class="pipeline-label">Retrieval<span>online path</span></div>
+        <div class="flow online-flow">
+          <article class="card node core-source"><span class="badge existing">Caller</span><h2>Business API</h2><p>Sends user, workspace, team, query, filters, and authorization context.</p></article>
+          <div class="flow-arrow dashed"><span>authorized query</span></div>
+          <article class="card node rag-service"><span class="badge proposed">Proposed RAG</span><h2>AI / RAG Service</h2><div class="rag-steps"><span>1 · Query rewrite + embedding</span><span>2 · ACL-aware hybrid search</span><span>3 · RRF / rerank + dedupe</span><span>4 · Context + citations</span></div><p class="rag-foot">Reads PostgreSQL FTS + pgvector with mandatory workspace/team ACL filters; returns a grounded answer with source references.</p></article>
+          <div class="flow-arrow dashed"><span>prompt / response</span></div>
+          <article class="card node llm"><span class="badge proposed">Provider TBD</span><h2>Shared Model Gateway</h2><p>Embedding model serves both indexing workers and online query embedding; generation model receives only authorized context.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="lane platform">
+      <div class="lane-label"><b>04</b>Production foundation</div>
+      <h2 class="lane-title">Shared operational platform</h2><p class="lane-subtitle">Cross-cutting infrastructure supports every independently deployed service.</p>
+      <div class="platform-grid">
+        <article class="platform-card"><span class="badge managed">Managed</span><h3>Secret Manager / KMS</h3><p>OAuth, webhook, BFF encryption, and rotating signing keys. No production secrets in environment files.</p></article>
+        <article class="platform-card"><span class="badge planned">Production baseline</span><h3>OpenTelemetry → Metrics · Logs · Traces</h3><p>Request IDs, auth failures, webhook delivery, queue lag, retrieval quality, model cost, SLO dashboards, and alerts.</p></article>
+        <article class="platform-card"><span class="badge planned">Production baseline</span><h3>Container Platform + CI/CD</h3><p>Independent deploy and scale; migrations as release jobs; health checks, canaries, and rollback.</p></article>
+      </div>
+    </section>
+  </section>
+
+  <footer>
+    <div class="principles"><div class="principle"><b>Browser → BFF only</b><span>The browser sends a secure session cookie; the BFF performs refresh and private API calls.</span></div><div class="principle"><b>Private service plane</b><span>Core, Auth internals, AI, workers, queues, Redis, and databases are not public.</span></div><div class="principle"><b>Evolution, not rewrite</b><span>Core and Auth survive. BFF moves out first; async and RAG arrive behind stable interfaces.</span></div><div class="principle"><b>Honest uncertainty</b><span>Queue, cloud, model provider, and container platform remain decisions, not fictional implementation.</span></div></div>
+    <div class="legend"><strong>Delivery maturity</strong><div class="legend-row"><span class="key ex">Existing</span><span class="key pl">Planned split</span><span class="key pr">Proposed RAG</span><span class="key ma">Managed infra</span></div><span>Dashed connectors represent external or asynchronous interaction.</span></div>
+  </footer>
+</main>
+</body>
+</html>
