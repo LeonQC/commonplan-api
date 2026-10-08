@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from sqlalchemy import BigInteger, Boolean, CheckConstraint, Date, DateTime, ForeignKey, JSON, Numeric, SmallInteger, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
+from pgvector.sqlalchemy import VECTOR
 
 from app.database import Base
 
@@ -568,5 +569,96 @@ class OutboxEvent(Base):
     status: Mapped[str] = mapped_column(String(24), default="pending", index=True)
     attempts: Mapped[int] = mapped_column(default=0)
     available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    locked_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class DocumentIngestion(Base):
+    __tablename__ = "document_ingestions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    file_asset_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("file_assets.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    status: Mapped[str] = mapped_column(String(24), default="pending", index=True)
+    parser_name: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    parser_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    chunker_version: Mapped[str] = mapped_column(String(40))
+    embedding_provider: Mapped[str] = mapped_column(String(40))
+    embedding_model: Mapped[str] = mapped_column(String(120))
+    embedding_dimensions: Mapped[int] = mapped_column()
+    content_sha256: Mapped[str] = mapped_column(String(64))
+    attempts: Mapped[int] = mapped_column(default=0)
+    error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class DocumentPage(Base):
+    __tablename__ = "document_pages"
+    __table_args__ = (UniqueConstraint("ingestion_id", "page_number"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    ingestion_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("document_ingestions.id", ondelete="CASCADE"), index=True
+    )
+    page_number: Mapped[int] = mapped_column()
+    heading_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    markdown_content: Mapped[str] = mapped_column(Text)
+    plain_text: Mapped[str] = mapped_column(Text)
+    token_count: Mapped[int] = mapped_column()
+
+
+class DocumentChunk(Base):
+    __tablename__ = "document_chunks"
+    __table_args__ = (
+        UniqueConstraint("ingestion_id", "chunk_index"),
+        CheckConstraint(
+            "(issue_id IS NOT NULL AND project_id IS NULL) OR "
+            "(issue_id IS NULL AND project_id IS NOT NULL)",
+            name="ck_document_chunk_scope",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    ingestion_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("document_ingestions.id", ondelete="CASCADE"), index=True
+    )
+    parent_page_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("document_pages.id", ondelete="CASCADE"), index=True
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    team_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("teams.id", ondelete="CASCADE"), index=True
+    )
+    issue_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("issues.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    project_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    chunk_index: Mapped[int] = mapped_column()
+    content: Mapped[str] = mapped_column(Text)
+    content_hash: Mapped[str] = mapped_column(String(64))
+    token_count: Mapped[int] = mapped_column()
+    page_from: Mapped[int] = mapped_column()
+    page_to: Mapped[int] = mapped_column()
+    heading_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    embedding: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    embedding_vector: Mapped[list[float] | None] = mapped_column(VECTOR(384), nullable=True)
+    chunk_metadata: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

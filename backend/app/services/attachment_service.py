@@ -116,6 +116,31 @@ class AttachmentService:
             raise AttachmentConflict("File is not ready")
         return self.storage.download_url(asset.storage_key, asset.original_filename)
 
+    def ingestion_status(self, user: User, workspace_id: str, file_id: str) -> dict:
+        self._file_with_access(user, workspace_id, file_id)
+        result = self.repository.ingestion(file_id)
+        if result is None:
+            return {"file_asset_id": file_id, "status": "not_started", "page_count": 0, "chunk_count": 0}
+        record, page_count, chunk_count = result
+        return {
+            "id": record.id,
+            "file_asset_id": record.file_asset_id,
+            "status": record.status,
+            "parser_name": record.parser_name,
+            "parser_version": record.parser_version,
+            "chunker_version": record.chunker_version,
+            "embedding_provider": record.embedding_provider,
+            "embedding_model": record.embedding_model,
+            "embedding_dimensions": record.embedding_dimensions,
+            "attempts": record.attempts,
+            "error_code": record.error_code,
+            "error_message": record.error_message,
+            "page_count": page_count,
+            "chunk_count": chunk_count,
+            "started_at": record.started_at,
+            "completed_at": record.completed_at,
+        }
+
     def delete(self, user: User, workspace_id: str, file_id: str) -> None:
         asset = self._file_with_access(user, workspace_id, file_id, for_update=True)
         try:

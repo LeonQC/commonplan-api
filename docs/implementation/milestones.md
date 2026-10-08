@@ -248,6 +248,11 @@ Scope is intentionally deferred until concrete agent use cases are approved. The
 
 Consume M9 outbox events asynchronously. Extract supported documents, record parser/version/checksum, chunk content, generate embeddings, and index them with workspace/team/resource ACL metadata. Retrieval must apply authorization before returning chunks; deleted files must cause index tombstones. Keep ingestion retryable and observable, and never make upload success depend on model or vector-store availability.
 
+Delivery is split into two reviewable vertical slices:
+
+- KEY-11 ingestion foundation: PostgreSQL outbox worker with leases/retries, parser and embedding adapters, parent pages, versioned chunks, delete tombstones, and an authorized status endpoint.
+- KEY-11 retrieval slice: pgvector HNSW indexing, authorization-filtered similarity queries, parent-page expansion, deterministic reranking, and citations. Evaluation fixtures and LLM answer generation remain separate so retrieval quality can be measured independently from generation quality.
+
 ## Verification loop for every milestone
 
 ### Automated

@@ -619,6 +619,62 @@ class AttachmentDownload(BaseModel):
     expires_in_seconds: int
 
 
+class AttachmentIngestionRead(BaseModel):
+    id: str | None = None
+    file_asset_id: str
+    status: str
+    parser_name: str | None = None
+    parser_version: str | None = None
+    chunker_version: str | None = None
+    embedding_provider: str | None = None
+    embedding_model: str | None = None
+    embedding_dimensions: int | None = None
+    attempts: int = 0
+    error_code: str | None = None
+    error_message: str | None = None
+    page_count: int = 0
+    chunk_count: int = 0
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
+class RetrievalSearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=1000)
+    limit: int = Field(default=10, ge=1, le=20)
+    team_id: str | None = None
+    issue_key: str | None = Field(default=None, max_length=64)
+    project_id: str | None = None
+
+
+class RetrievalCitationRead(BaseModel):
+    file_asset_id: str
+    filename: str
+    page_number: int
+    heading_path: str | None
+    team_id: str
+    resource_type: str
+    resource_id: str
+    resource_key: str
+
+
+class RetrievalResultRead(BaseModel):
+    chunk_id: str
+    score: float
+    vector_score: float
+    lexical_score: float
+    excerpt: str
+    context: str
+    citation: RetrievalCitationRead
+
+
+class RetrievalSearchRead(BaseModel):
+    query: str
+    embedding_provider: str
+    embedding_model: str
+    candidate_count: int
+    results: list[RetrievalResultRead]
+
+
 class TeamSummaryRead(BaseModel):
     scope: dict
     filters: dict

@@ -22,6 +22,7 @@ from app.view_notification_routes import router as view_notification_router
 from app.github_routes import router as github_router, webhook_router as github_webhook_router
 from app.attachment_routes import router as attachment_router
 from app.storage_routes import router as storage_router
+from app.retrieval_routes import router as retrieval_router
 
 
 @asynccontextmanager
@@ -48,6 +49,7 @@ business_router.include_router(collaboration_router)
 business_router.include_router(view_notification_router)
 business_router.include_router(github_router)
 business_router.include_router(attachment_router)
+business_router.include_router(retrieval_router)
 
 
 @app.exception_handler(SessionStoreUnavailable)
