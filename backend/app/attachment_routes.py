@@ -2,7 +2,10 @@ from fastapi import APIRouter, HTTPException
 
 from app.auth import CurrentUser
 from app.config import settings
-from app.schemas import AttachmentDownload, AttachmentInitiate, AttachmentInitiated, AttachmentRead
+from app.schemas import (
+    AttachmentDownload, AttachmentIngestionRead, AttachmentInitiate, AttachmentInitiated,
+    AttachmentRead,
+)
 from app.services.attachment_service import (
     AttachmentConflict, AttachmentForbidden, AttachmentNotFound, AttachmentServiceDep,
     AttachmentStorageError, AttachmentValidationError,
@@ -82,6 +85,19 @@ def attachment_download_url(workspace_id: str, file_id: str, current_user: Curre
             expires_in_seconds=settings.attachment_url_ttl_seconds,
         )
     except (AttachmentNotFound, AttachmentForbidden, AttachmentConflict) as exc:
+        raise _error(exc) from exc
+
+
+@router.get(
+    "/workspaces/{workspace_id}/files/{file_id}/ingestion",
+    response_model=AttachmentIngestionRead,
+)
+def attachment_ingestion_status(
+    workspace_id: str, file_id: str, current_user: CurrentUser, service: AttachmentServiceDep,
+):
+    try:
+        return service.ingestion_status(current_user, workspace_id, file_id)
+    except (AttachmentNotFound, AttachmentForbidden) as exc:
         raise _error(exc) from exc
 
 

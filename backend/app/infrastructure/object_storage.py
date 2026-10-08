@@ -21,6 +21,7 @@ class ObjectStorage(Protocol):
     def upload_url(self, storage_key: str, content_type: str, byte_size: int) -> str: ...
     def download_url(self, storage_key: str, filename: str) -> str: ...
     def stat(self, storage_key: str) -> StoredObject | None: ...
+    def read(self, storage_key: str) -> bytes: ...
     def delete(self, storage_key: str) -> None: ...
 
 
@@ -75,6 +76,9 @@ class S3ObjectStorage:
             byte_size=int(result["ContentLength"]), content_type=result.get("ContentType")
         )
 
+    def read(self, storage_key: str) -> bytes:
+        return self.internal.get_object(Bucket=self.bucket, Key=storage_key)["Body"].read()
+
     def delete(self, storage_key: str) -> None:
         self.internal.delete_object(Bucket=self.bucket, Key=storage_key)
 
@@ -105,6 +109,9 @@ class LocalObjectStorage:
         if not path.is_file():
             return None
         return StoredObject(byte_size=path.stat().st_size, content_type=None)
+
+    def read(self, storage_key: str) -> bytes:
+        return self.path(storage_key).read_bytes()
 
     def delete(self, storage_key: str) -> None:
         path = self.path(storage_key)
