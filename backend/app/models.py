@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 
+from pgvector.sqlalchemy import VECTOR
 from sqlalchemy import BigInteger, Boolean, CheckConstraint, Date, DateTime, ForeignKey, JSON, Numeric, SmallInteger, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -657,6 +658,6 @@ class DocumentChunk(Base):
     page_from: Mapped[int] = mapped_column()
     page_to: Mapped[int] = mapped_column()
     heading_path: Mapped[str | None] = mapped_column(Text, nullable=True)
-    embedding: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    embedding: Mapped[list[float]] = mapped_column(VECTOR(384), nullable=False)
     chunk_metadata: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

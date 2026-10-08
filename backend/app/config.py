@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     def validate_cookie_settings(self) -> "Settings":
         if self.cookie_same_site == "none" and not self.cookie_secure:
             raise ValueError("SameSite=None cookies require COOKIE_SECURE=true")
+        if self.ingestion_embedding_dimensions != 384:
+            raise ValueError(
+                "INGESTION_EMBEDDING_DIMENSIONS must remain 384 until a new vector migration is added"
+            )
         return self
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", env_ignore_empty=True)
