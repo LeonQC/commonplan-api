@@ -50,11 +50,16 @@ class Settings(BaseSettings):
     ingestion_embedding_model: str = "local-hash-v1"
     ingestion_embedding_dimensions: int = 384
     openai_api_key: str = ""
+    retrieval_candidate_multiplier: int = 4
+    retrieval_parent_max_chars: int = 6000
+    retrieval_min_score: float = 0.15
 
     @model_validator(mode="after")
     def validate_cookie_settings(self) -> "Settings":
         if self.cookie_same_site == "none" and not self.cookie_secure:
             raise ValueError("SameSite=None cookies require COOKIE_SECURE=true")
+        if self.ingestion_embedding_dimensions != 384:
+            raise ValueError("INGESTION_EMBEDDING_DIMENSIONS must match vector(384)")
         return self
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", env_ignore_empty=True)

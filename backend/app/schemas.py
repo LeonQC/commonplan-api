@@ -638,6 +638,43 @@ class AttachmentIngestionRead(BaseModel):
     completed_at: datetime | None = None
 
 
+class RetrievalSearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=1000)
+    limit: int = Field(default=10, ge=1, le=20)
+    team_id: str | None = None
+    issue_key: str | None = Field(default=None, max_length=64)
+    project_id: str | None = None
+
+
+class RetrievalCitationRead(BaseModel):
+    file_asset_id: str
+    filename: str
+    page_number: int
+    heading_path: str | None
+    team_id: str
+    resource_type: str
+    resource_id: str
+    resource_key: str
+
+
+class RetrievalResultRead(BaseModel):
+    chunk_id: str
+    score: float
+    vector_score: float
+    lexical_score: float
+    excerpt: str
+    context: str
+    citation: RetrievalCitationRead
+
+
+class RetrievalSearchRead(BaseModel):
+    query: str
+    embedding_provider: str
+    embedding_model: str
+    candidate_count: int
+    results: list[RetrievalResultRead]
+
+
 class TeamSummaryRead(BaseModel):
     scope: dict
     filters: dict

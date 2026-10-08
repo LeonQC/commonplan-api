@@ -251,7 +251,7 @@ Consume M9 outbox events asynchronously. Extract supported documents, record par
 Delivery is split into two reviewable vertical slices:
 
 - KEY-11 ingestion foundation: PostgreSQL outbox worker with leases/retries, parser and embedding adapters, parent pages, versioned chunks, delete tombstones, and an authorized status endpoint.
-- Retrieval completion: pgvector (or a separately approved vector store), authorization-filtered similarity queries, parent-page expansion, reranking, citations, and evaluation fixtures. Retrieval is not considered shipped while vectors remain in the foundation's JSONB portability format.
+- KEY-11 retrieval slice: pgvector HNSW indexing, authorization-filtered similarity queries, parent-page expansion, deterministic reranking, and citations. Evaluation fixtures and LLM answer generation remain separate so retrieval quality can be measured independently from generation quality.
 
 ## Verification loop for every milestone
 

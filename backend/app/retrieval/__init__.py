@@ -1,0 +1,1 @@
+"""Authorization-scoped document retrieval."""

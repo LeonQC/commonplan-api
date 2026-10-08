@@ -189,6 +189,7 @@ class IngestionRepository:
                 page_to=chunk.page_number,
                 heading_path=chunk.heading_path,
                 embedding=embedding,
+                embedding_vector=embedding,
                 chunk_metadata=chunk.metadata,
             ))
         ingestion.status = "ready"

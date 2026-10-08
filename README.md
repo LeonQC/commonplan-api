@@ -37,6 +37,8 @@ M9 stores attachment metadata and resource links in PostgreSQL while file bytes 
 
 The KEY-11 ingestion foundation consumes those durable attachment events in a separate worker, preserving parent pages, retryable chunk/embedding state, and resource ACL metadata. Local Compose uses a deterministic embedding adapter so the complete flow works without an external API key. See [the ingestion design and runbook](docs/data-model/08-rag-ingestion.md).
 
+The retrieval slice adds a pgvector HNSW index and an authenticated evidence-search API. Candidate selection applies workspace/team/resource authorization inside the vector query, then expands parent-page context and returns stable citations. See [the retrieval contract](docs/data-model/09-rag-retrieval.md).
+
 ## Tests
 
 ```bash
