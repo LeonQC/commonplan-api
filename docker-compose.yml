@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:0.8.7-pg16
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-zhitong}
       POSTGRES_USER: ${POSTGRES_USER:-zhitong}
@@ -154,6 +154,38 @@ services:
         condition: service_completed_successfully
       auth-service:
         condition: service_healthy
+
+  ingestion-worker:
+    build:
+      context: ./backend
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://zhitong:zhitong@db:5432/zhitong}
+      OBJECT_STORAGE_DRIVER: ${OBJECT_STORAGE_DRIVER:-local}
+      OBJECT_STORAGE_LOCAL_PATH: /var/lib/commonplan/attachments
+      OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-https://s3.amazonaws.com}
+      OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-us-east-1}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-commonplan-attachments}
+      OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:-commonplan}
+      OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:-commonplan-local-secret}
+      INGESTION_WORKER_ID: ${INGESTION_WORKER_ID:-ingestion-worker-1}
+      INGESTION_POLL_SECONDS: ${INGESTION_POLL_SECONDS:-1}
+      INGESTION_LEASE_SECONDS: ${INGESTION_LEASE_SECONDS:-600}
+      INGESTION_MAX_ATTEMPTS: ${INGESTION_MAX_ATTEMPTS:-5}
+      INGESTION_ALLOW_UNSCANNED: ${INGESTION_ALLOW_UNSCANNED:-true}
+      INGESTION_CHUNK_TOKENS: ${INGESTION_CHUNK_TOKENS:-300}
+      INGESTION_CHUNK_OVERLAP_TOKENS: ${INGESTION_CHUNK_OVERLAP_TOKENS:-50}
+      INGESTION_EMBEDDING_PROVIDER: ${INGESTION_EMBEDDING_PROVIDER:-local_hash}
+      INGESTION_EMBEDDING_MODEL: ${INGESTION_EMBEDDING_MODEL:-local-hash-v1}
+      INGESTION_EMBEDDING_DIMENSIONS: ${INGESTION_EMBEDDING_DIMENSIONS:-384}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    command: ["python", "-m", "app.ingestion.worker"]
+    restart: unless-stopped
+    volumes:
+      - ./backend/app:/app/app
+      - attachment_data:/var/lib/commonplan/attachments
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:

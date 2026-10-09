@@ -39,11 +39,26 @@ class Settings(BaseSettings):
     object_storage_secret_key: str = "commonplan-local-secret"
     attachment_upload_max_bytes: int = 25 * 1024 * 1024
     attachment_url_ttl_seconds: int = 15 * 60
+    ingestion_worker_id: str = "ingestion-worker-1"
+    ingestion_poll_seconds: float = 1.0
+    ingestion_lease_seconds: int = 10 * 60
+    ingestion_max_attempts: int = 5
+    ingestion_allow_unscanned: bool = True
+    ingestion_chunk_tokens: int = 300
+    ingestion_chunk_overlap_tokens: int = 50
+    ingestion_embedding_provider: Literal["local_hash", "openai"] = "local_hash"
+    ingestion_embedding_model: str = "local-hash-v1"
+    ingestion_embedding_dimensions: int = 384
+    openai_api_key: str = ""
 
     @model_validator(mode="after")
     def validate_cookie_settings(self) -> "Settings":
         if self.cookie_same_site == "none" and not self.cookie_secure:
             raise ValueError("SameSite=None cookies require COOKIE_SECURE=true")
+        if self.ingestion_embedding_dimensions != 384:
+            raise ValueError(
+                "INGESTION_EMBEDDING_DIMENSIONS must remain 384 until a new vector migration is added"
+            )
         return self
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", env_ignore_empty=True)

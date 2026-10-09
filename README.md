@@ -35,6 +35,8 @@ M7 links pull requests to issues when a PR title contains an exact item key. Loc
 
 M9 stores attachment metadata and resource links in PostgreSQL while file bytes stay outside the database. Local Docker uses a persistent file volume behind signed Business API URLs; deployment can set `OBJECT_STORAGE_DRIVER=s3` to use a private S3-compatible bucket. The browser receives a short-lived upload URL, uploads directly, then calls the authenticated complete endpoint. Download URLs are also short lived and issued only after resource authorization is checked again. See [the attachment data/API contract](docs/data-model/07-attachments.md).
 
+The KEY-11 ingestion foundation consumes those durable attachment events in a separate worker, preserving parent pages, retryable chunk/embedding state, resource ACL metadata, and canonical pgvector embeddings. Local Compose uses a deterministic embedding adapter so the complete flow works without an external API key. See [the ingestion design](docs/data-model/08-rag-ingestion.md) and [the ingestion verification runbook](docs/implementation/ingestion-verification.md).
+
 ## Tests
 
 ```bash
