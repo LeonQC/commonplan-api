@@ -9,9 +9,9 @@ authenticated upload completion
   -> file_assets(upload_status=ready) + outbox_events(file.ready), one transaction
   -> ingestion-worker claims the event with FOR UPDATE SKIP LOCKED
   -> reads object storage and verifies SHA-256
-  -> parser produces parent pages with page/heading metadata
-  -> word-window chunker produces 300-token chunks with 50-token overlap
-  -> embedding adapter produces 384-dimensional vectors
+  -> Docling parses layout, reading order, tables, OCR, pages, and headings
+  -> Docling HybridChunker uses the pinned Qwen tokenizer (300-token maximum)
+  -> private TEI service produces normalized 1024-dimensional Qwen vectors
   -> document_pages + document_chunks + document_ingestions(status=ready)
   -> outbox event becomes published
 ```
@@ -25,15 +25,19 @@ Upload completion returns before parsing or embeddings run. A failure is written
 | `outbox_events` | Durable queue, attempt count, lease owner, next retry, last error |
 | `document_ingestions` | One current pipeline result per file, including checksum and parser/chunker/embedding versions |
 | `document_pages` | Parent-page text used to expand the context around a matching chunk |
-| `document_chunks` | Search units plus denormalized workspace/team/resource ACL scope and canonical `vector(384)` embedding |
+| `document_chunks` | Search units plus denormalized workspace/team/resource ACL scope and canonical `vector(1024)` embedding |
 
 Each chunk belongs to exactly one issue or project. The denormalized `workspace_id`, `team_id`, `issue_id`/`project_id` fields make it possible for the future retrieval query to apply authorization in the same database statement that selects candidates.
 
 ## Adapters and production evolution
 
-The parser registry currently supports PDF, Markdown, plain text, CSV and JSON. Office files are accepted by upload but are intentionally reported as unsupported by ingestion until a structure-aware parser such as Docling is introduced.
+Docling 2.135.0 handles PDF, CSV, DOCX, XLSX, PPTX, and supported images in the dedicated worker image. It preserves structured Markdown, per-page provenance, headings, reading order, and tables. Plain text, Markdown, and JSON retain a lightweight parser because their source representation is already canonical. Legacy binary `.doc` uploads remain downloadable but are not ingestible; callers receive `unsupported_content_type` instead of a misleading partial parse.
 
-`local_hash` is a deterministic, dependency-free adapter for local end-to-end testing; it is not semantic search. A deployment can set `INGESTION_EMBEDDING_PROVIDER=openai`, `INGESTION_EMBEDDING_MODEL=text-embedding-3-large`, and `OPENAI_API_KEY`. The ingestion boundary persists embeddings as pgvector `vector(384)` values. Changing dimensions requires a reviewed schema migration; configuration therefore fails fast when it differs from 384.
+The canonical embedding profile is `Qwen/Qwen3-Embedding-0.6B` at revision `97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3`, served privately by TEI 1.9. The worker sends bounded batches, validates the response count and dimensions, rejects zero/non-finite vectors, normalizes defensively, and persists `vector(1024)`. Model ID, immutable revision, and dimensions are part of the durable ingestion identity. Local CPU defaults use three chunks per client batch and a 1,024-token scheduler budget because CommonPlan chunks are capped at 300 tokens; GPU deployments can raise both through environment variables. `local_hash` remains available only when explicitly selected for isolated tests; the factory never silently falls back to it.
+
+The model weights and Docling assets use persistent Docker volumes. After the first successful download, restarts do not fetch them again. ARM64 local development uses TEI's `cpu-arm64-1.9` image; x86_64 deployments must set `TEI_IMAGE=ghcr.io/huggingface/text-embeddings-inference:cpu-1.9`.
+
+Embedding changes are intentionally migration-controlled. Migration `20261009_0020` discards old vectors because they are derived data in an incompatible vector space, changes the column to `vector(1024)`, and queues every ready source file for re-ingestion. Source objects and authorization metadata remain authoritative.
 
 This phase intentionally creates no vector similarity index and exposes no similarity-search API. HNSW/index tuning, authorization-filtered candidate selection, reranking and citations belong to the separately reviewed retrieval phase.
 
@@ -42,7 +46,7 @@ This phase intentionally creates no vector similarity index and exposes no simil
 - `GET /api/v1/workspaces/{workspace_id}/files/{file_id}/ingestion` returns `not_started`, current stage, counts, adapter versions, or failure details after normal resource authorization.
 - `python -m app.ingestion.worker` runs continuously.
 - `python -m app.ingestion.worker --once` claims at most one event for deterministic local verification.
-- Docker Compose starts `ingestion-worker` against the same database and attachment volume as the Business API.
+- Docker Compose starts `embedding-service` and the heavier `ingestion-worker` image separately from the Business API. Docling dependencies never enter the latency-sensitive API image.
 - [`../implementation/ingestion-verification.md`](../implementation/ingestion-verification.md) provides the upload, status, SQL inspection, invariant, and recovery checks used to accept this phase before retrieval begins.
 
 The service layer never receives a SQLAlchemy session. All claims, reads, writes, retries and counts stay inside `IngestionRepository`.

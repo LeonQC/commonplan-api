@@ -41,7 +41,7 @@
     .card h2,.card h3 { margin:0; letter-spacing:-.015em; }
     .card p { margin:6px 0 0; color:var(--muted); font-size:8px; line-height:1.45; }
     .badge { position:absolute; right:10px; top:9px; padding:3px 6px; border-radius:999px; background:rgba(255,255,255,.82); font-size:6.5px; font-weight:830; letter-spacing:.08em; text-transform:uppercase; }
-    .existing { color:#2864bd; } .planned { color:#91600f; } .proposed { color:#675bc8; } .managed { color:#607087; }
+    .existing { color:#2864bd; } .implemented { color:#126f66; } .planned { color:#91600f; } .proposed { color:#675bc8; } .managed { color:#607087; }
 
     .runtime { min-height:277px; }
     .runtime .node { width:245px; min-height:112px; padding:17px 17px 15px; }
@@ -170,7 +170,7 @@
           <div class="flow-arrow dashed"><span>index job</span></div>
           <article class="card node queue ingest-queue"><span class="badge proposed">Technology TBD</span><h2>Event Bus / Queue</h2><p>Retries, dead letters, deduplication, and back-pressure.</p></article>
           <div class="flow-arrow dashed"><span>consume</span></div>
-          <article class="card node ingest-worker"><span class="badge proposed">Proposed</span><h2>Ingestion Workers</h2><p>Load object · parse · normalize · chunk · call shared embedding gateway · version · index.</p></article>
+          <article class="card node ingest-worker"><span class="badge implemented">Implemented</span><h2>Ingestion Workers</h2><p>Load object · Docling parse · Qwen-tokenized HybridChunker · call private TEI · version · persist.</p></article>
           <div class="flow-arrow dashed"><span>upsert</span></div>
           <article class="card node ingest-corpus"><span class="badge proposed">Proposed corpus</span><h2>Retrieval Corpus</h2><p>Object Storage for artifacts · PostgreSQL full-text + pgvector for chunks, ACL metadata, and embedding vectors.</p></article>
         </div>
@@ -183,7 +183,7 @@
           <div class="flow-arrow dashed"><span>authorized query</span></div>
           <article class="card node rag-service"><span class="badge proposed">Proposed RAG</span><h2>AI / RAG Service</h2><div class="rag-steps"><span>1 · Query rewrite + embedding</span><span>2 · ACL-aware hybrid search</span><span>3 · RRF / rerank + dedupe</span><span>4 · Context + citations</span></div><p class="rag-foot">Reads PostgreSQL FTS + pgvector with mandatory workspace/team ACL filters; returns a grounded answer with source references.</p></article>
           <div class="flow-arrow dashed"><span>prompt / response</span></div>
-          <article class="card node llm"><span class="badge proposed">Provider TBD</span><h2>Shared Model Gateway</h2><p>Embedding model serves both indexing workers and online query embedding; generation model receives only authorized context.</p></article>
+          <article class="card node llm"><span class="badge implemented">Embedding implemented</span><h2>Shared Model Gateway</h2><p>Pinned Qwen3-Embedding-0.6B via private TEI produces 1024-dimensional document vectors; retrieval must use the same profile for query vectors. Generation model remains separate and receives only authorized context.</p></article>
         </div>
       </div>
     </section>

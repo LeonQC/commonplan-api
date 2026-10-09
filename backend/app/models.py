@@ -658,6 +658,6 @@ class DocumentChunk(Base):
     page_from: Mapped[int] = mapped_column()
     page_to: Mapped[int] = mapped_column()
     heading_path: Mapped[str | None] = mapped_column(Text, nullable=True)
-    embedding: Mapped[list[float]] = mapped_column(VECTOR(384), nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(VECTOR(1024), nullable=False)
     chunk_metadata: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

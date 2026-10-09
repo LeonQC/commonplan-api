@@ -85,7 +85,7 @@ class IngestionService:
             embedding_dimensions=self.embeddings.dimensions,
         )
         try:
-            document = self.parsers.parse(file.content_type, content)
+            document = self.parsers.parse(file.content_type, content, file.original_filename)
             chunks = chunk_document(
                 document,
                 chunk_tokens=settings.ingestion_chunk_tokens,

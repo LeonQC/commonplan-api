@@ -46,10 +46,10 @@ may be sufficient at initial load.
   rewrite and embed the query; enforce metadata ACL filters during hybrid full-text/vector search;
   fuse results with RRF, rerank and deduplicate; assemble cited context; call the model gateway; and
   return a grounded answer with source references.
-- **Shared Model Gateway**: give indexing workers and the online service one provider-neutral interface.
-  Workers call its embedding model for document chunks; online retrieval calls the same compatible
-  embedding model for query vectors and calls the generation model only after authorization-filtered
-  context has been assembled.
+- **Shared Model Gateway**: the first implementation is a private TEI service running the pinned
+  `Qwen/Qwen3-Embedding-0.6B` revision. Workers call it for 1024-dimensional document vectors;
+  online retrieval must call that same embedding profile for query vectors. A generation model is a
+  separate dependency and is called only after authorization-filtered context has been assembled.
 
 The initial vector index can use `pgvector` alongside product metadata in Business PostgreSQL. Original
 attachments and parsing artifacts belong in object storage. A separate vector database should be

@@ -2,23 +2,36 @@
 
 This runbook deliberately stops before similarity search. Its acceptance
 boundary is: a completed attachment is parsed, chunked, embedded, and stored as
-authorized `vector(384)` rows that can be inspected independently of any
+authorized `vector(1024)` rows that can be inspected independently of any
 retrieval or answer-generation behavior.
 
 ## 1. Start the ingestion stack
 
 ```bash
-docker compose up --build db redis auth-service backend ingestion-worker
+docker compose up --build db redis auth-service embedding-service backend ingestion-worker
 ```
 
 The database image includes pgvector. Alembic enables the extension and changes
 `document_chunks.embedding` from the temporary JSONB representation to the
-canonical `vector(384)` type.
+canonical `vector(1024)` type. The first start downloads the pinned Qwen model
+and Docling assets into persistent volumes. Wait for the TEI health endpoint:
+
+```bash
+curl --fail http://localhost:8080/health
+```
+
+The local embedding endpoint is bound to `127.0.0.1` only. The conservative CPU defaults (`3` inputs and `1,024` scheduled tokens per batch) keep Qwen warm-up practical on a development laptop; tune `INGESTION_EMBEDDING_BATCH_SIZE`, `TEI_MAX_BATCH_TOKENS`, `TEI_MAX_CONCURRENT_REQUESTS`, and `TEI_TOKENIZATION_WORKERS` for a GPU deployment.
+
+Apple Silicon uses the default ARM64 image. On x86_64 set:
+
+```bash
+TEI_IMAGE=ghcr.io/huggingface/text-embeddings-inference:cpu-1.9 docker compose up --build
+```
 
 ## 2. Produce one ingestion
 
 Open the web application, enter an Issue or Project detail page, and upload a
-small Markdown, text, PDF, CSV, or JSON file. Upload completion writes the ready
+small Markdown, text, PDF, CSV, JSON, DOCX, XLSX, PPTX, or image file. Upload completion writes the ready
 file and its `file.ready` outbox event in one transaction. The worker handles
 parsing and embeddings asynchronously.
 
@@ -45,7 +58,8 @@ For a successful upload, verify:
 - `file_assets.upload_status = 'ready'`;
 - `document_ingestions.status = 'ready'`;
 - page and chunk counts are greater than zero;
-- every chunk reports `vector_dims = 384` and a non-zero `vector_norm`;
+- every chunk reports `vector_dims = 1024` and `vector_norm` close to `1.0`;
+- structured formats report `parser_name = 'docling'` and `chunk_metadata.strategy = 'docling_hybrid'`;
 - `workspace_id`, `team_id`, and exactly one resource ID are present;
 - the acceptance-invariant query returns zero rows;
 - no corresponding outbox event remains pending or failed.
@@ -57,7 +71,7 @@ performing nearest-neighbor search.
 
 ## 4. Exercise failure and recovery
 
-Upload an unsupported Office file to confirm that the ingestion becomes
+Upload a legacy binary `.doc` file to confirm that the ingestion becomes
 `failed` while the original attachment remains downloadable. Its error code and
 message should appear in both the status endpoint and inspection query.
 
@@ -66,10 +80,20 @@ to `pending` only in a disposable local database, or upload the file again. The
 worker's lease, attempt count, and exponential backoff are visible in
 `outbox_events`; process restart must not lose the job.
 
+## 5. Verify the embedding service directly
+
+```bash
+curl http://localhost:8080/embed \
+  -H 'Content-Type: application/json' \
+  -d '{"inputs":["CommonPlan links issues to project knowledge."],"normalize":true}' \
+  | python -c 'import json,sys; v=json.load(sys.stdin)[0]; print(len(v), round(sum(x*x for x in v), 6))'
+```
+
+Expected output is `1024 1.0` (subject only to floating-point rounding).
+
 ## What this does not validate
 
-The local `local_hash` adapter is deterministic and useful for verifying the
-pipeline, storage shape, and idempotency, but it is not evidence of semantic
-quality. Retrieval evaluation starts only after this ingestion contract is
-accepted. That later phase will add the vector index, authorization-filtered
-nearest-neighbor query, reranking, citations, and quality fixtures.
+This proves that production parsing and semantic vectors are durable. It does
+not prove retrieval quality. The later retrieval phase will add the vector
+index, authorization-filtered nearest-neighbor query, lexical search, fusion,
+reranking, citations, and a bilingual quality regression dataset.

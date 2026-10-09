@@ -1,4 +1,5 @@
 import argparse
+from functools import lru_cache
 import logging
 import socket
 import time
@@ -16,6 +17,18 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger("commonplan.ingestion")
 
 
+@lru_cache(maxsize=1)
+def parser_registry() -> ParserRegistry:
+    # Reuse the initialized Docling pipelines and downloaded model artifacts
+    # across events handled by this worker process.
+    return ParserRegistry()
+
+
+@lru_cache(maxsize=1)
+def embedding_provider():
+    return create_embedding_provider()
+
+
 def run_once(worker_id: str) -> bool:
     with SessionLocal() as db:
         repository = IngestionRepository(db)
@@ -29,8 +42,8 @@ def run_once(worker_id: str) -> bool:
         service = IngestionService(
             repository,
             get_object_storage(),
-            ParserRegistry(),
-            create_embedding_provider(),
+            parser_registry(),
+            embedding_provider(),
         )
         try:
             service.process(event)

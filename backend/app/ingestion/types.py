@@ -14,6 +14,9 @@ class ParsedDocument:
     parser_name: str
     parser_version: str
     pages: list[ParsedPage]
+    # Kept in memory only while a structure-aware chunker runs. ORM models
+    # persist the normalized pages/chunks, never this parser-specific object.
+    native_document: object | None = None
 
 
 @dataclass(frozen=True)
