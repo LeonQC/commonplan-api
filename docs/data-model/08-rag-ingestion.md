@@ -33,6 +33,29 @@ Each chunk belongs to exactly one issue or project. The denormalized `workspace_
 
 Docling 2.135.0 handles PDF, CSV, DOCX, XLSX, PPTX, and supported images in the dedicated worker image. It preserves structured Markdown, per-page provenance, headings, reading order, and tables. Plain text, Markdown, and JSON retain a lightweight parser because their source representation is already canonical. Legacy binary `.doc` uploads remain downloadable but are not ingestible; callers receive `unsupported_content_type` instead of a misleading partial parse.
 
+### Chunk overlap policy
+
+The two chunking paths do not currently have identical overlap behavior:
+
+- Plain-text fallback chunks use a 300-word sliding window with 50 words of overlap.
+- Docling documents use structure-aware `HybridChunker` output without synthetic overlap. The
+  current Docling API splits oversized structural units and merges compatible peers, but does not
+  expose a `chunk_overlap` option.
+
+CommonPlan must not add hidden overlap only to the text sent to the embedding model. Doing so would
+make the persisted chunk text differ from the content represented by its vector, obscure provenance,
+and make re-indexing and retrieval debugging harder. The canonical rule is that the contextualized
+text persisted for a chunk is the same text used to create its embedding.
+
+The first retrieval implementation should expand a hit with its parent page or explicitly selected
+neighbor chunks, then rerank and deduplicate that context. This recovers boundary context without
+duplicating every structure-aware chunk in the index. If the retrieval regression dataset later shows
+a measurable boundary-recall problem, overlap may be introduced as a versioned chunker change only
+when all of the following are stored explicitly: the overlapped canonical text, source chunk/span IDs,
+the union of source-page provenance, and the new chunker version. Search must then collapse duplicate
+neighbor hits before assembling context. A cross-heading, cross-table, or cross-resource overlap is
+never permitted.
+
 The canonical embedding profile is `Qwen/Qwen3-Embedding-0.6B` at revision `97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3`, served privately by TEI 1.9. The worker sends bounded batches, validates the response count and dimensions, rejects zero/non-finite vectors, normalizes defensively, and persists `vector(1024)`. Model ID, immutable revision, and dimensions are part of the durable ingestion identity. Local CPU defaults use three chunks per client batch and a 1,024-token scheduler budget because CommonPlan chunks are capped at 300 tokens; GPU deployments can raise both through environment variables. `local_hash` remains available only when explicitly selected for isolated tests; the factory never silently falls back to it.
 
 The model weights and Docling assets use persistent Docker volumes. After the first successful download, restarts do not fetch them again. ARM64 local development uses TEI's `cpu-arm64-1.9` image; x86_64 deployments must set `TEI_IMAGE=ghcr.io/huggingface/text-embeddings-inference:cpu-1.9`.
