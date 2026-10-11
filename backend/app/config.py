@@ -47,13 +47,18 @@ class Settings(BaseSettings):
     ingestion_chunk_tokens: int = 300
     ingestion_chunk_overlap_tokens: int = 50
     ingestion_docling_max_pages: int = 500
-    ingestion_embedding_provider: Literal["local_hash", "tei", "openai"] = "tei"
+    ingestion_embedding_provider: Literal[
+        "local_hash", "tei", "openai", "model_gateway"
+    ] = "model_gateway"
     ingestion_embedding_model: str = "Qwen/Qwen3-Embedding-0.6B"
     ingestion_embedding_model_revision: str = "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
     ingestion_embedding_dimensions: int = 1024
     ingestion_embedding_base_url: str = "http://embedding-service"
     ingestion_embedding_batch_size: int = 3
     ingestion_embedding_timeout_seconds: float = 120
+    model_gateway_base_url: str = "http://model-gateway:4000/v1"
+    model_gateway_api_key: str = ""
+    model_gateway_embedding_alias: str = "commonplan-embedding-v1"
     openai_api_key: str = ""
 
     @model_validator(mode="after")

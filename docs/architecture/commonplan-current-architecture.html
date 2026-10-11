@@ -70,7 +70,9 @@
     .external span { display: block; margin-top: 5px; color: var(--muted); font-size: 8px; line-height: 1.35; }
     .github { left: 1280px; top: 236px; border-color: #d28a96; background: var(--rose-soft); color: #9e4153; }
     .google { left: 280px; top: 528px; border-color: #d8ae52; background: var(--amber-soft); color: #876014; }
-    .embedding { left: 1040px; top: 704px; width: 300px; border-color: #a79fea; background: #f5f3ff; color: #6558b8; }
+    .embedding { left: 1040px; top: 698px; width: 300px; border-color: #a79fea; background: #f5f3ff; color: #6558b8; }
+    .tei { left: 1040px; top: 774px; width: 300px; border-color: #8d86dc; background: #faf9ff; color: #6558b8; }
+    .mcp { left: 122px; top: 698px; width: 330px; border-color: #c5a05a; background: #fffaf0; color: #876014; }
     .store { top: 850px; min-height: 112px; padding: 17px 18px; border-color: #c8ccd9; background: var(--slate-soft); color: #424657; }
     .store h3 { font-size: 12px; }
     .store p { font-size: 8px; }
@@ -102,7 +104,7 @@
 <body>
   <main>
     <header>
-      <div><span class="eyebrow">KEY-7 / KEY-11 · Code-backed architecture</span><h1>CommonPlan · Current System Architecture</h1><p>Implemented deployment, trust, persistence, attachment, and offline-ingestion boundaries.</p></div>
+      <div><span class="eyebrow">KEY-7 / KEY-11 · Code-backed architecture</span><h1>CommonPlan · Current System Architecture</h1><p>Implemented deployment, trust, persistence, offline ingestion, and optional empty MCP boundary.</p></div>
       <div class="meta"><strong>Current state · October 2026</strong><span>Source: this repository + commonplan-web master</span><span>Online retrieval and generation are not implemented</span></div>
     </header>
 
@@ -124,7 +126,8 @@
         <path class="edge future-edge" d="M1090 440 C1090 470 1190 470 1190 500" /><text class="edge-label" x="1100" y="470">durable file.ready event</text>
         <path class="edge data-edge" d="M1100 674 C1000 790 524 748 524 850" /><text class="edge-label" x="728" y="770">read source object</text>
         <path class="edge data-edge" d="M1065 674 C960 820 330 770 330 850" /><text class="edge-label" x="690" y="818">persist pages + chunks</text>
-        <path class="edge future-edge" d="M1190 674 L1190 704" /><text class="edge-label" x="1202" y="695">embed</text>
+        <path class="edge future-edge" d="M1190 674 L1190 698" /><text class="edge-label" x="1202" y="690">alias + service key</text>
+        <path class="edge future-edge" d="M1190 762 L1190 774" />
         <path class="edge external-edge" d="M1280 286 C1230 286 1215 310 1190 310" /><text class="edge-label" x="1204" y="273">signed webhook</text>
         <path class="edge external-edge" d="M464 574 L488 574" /><text class="edge-label" x="394" y="560">OAuth / OIDC</text>
         <path class="edge future-edge" d="M1280 400 C1420 430 1408 470 1408 500" />
@@ -148,7 +151,9 @@
 
       <aside class="external github"><strong>GitHub</strong><span>Organization/repository webhook. PR titles containing an issue key link automatically. smee forwards events only in local development.</span></aside>
       <aside class="external google"><strong>Google OAuth / OIDC</strong><span>Authorization-code identity flow. Client secret and token exchange remain server-side.</span></aside>
-      <aside class="external embedding"><strong>Private Qwen / TEI</strong><span>Pinned Qwen3-Embedding-0.6B revision · 1,024 dimensions · local model cache · no generation model.</span></aside>
+      <aside class="external embedding"><strong>Private LiteLLM Gateway · :4000</strong><span>Authenticated OpenAI-compatible `commonplan-embedding-v1` alias · request validation · retry boundary.</span></aside>
+      <aside class="external tei"><strong>Private Qwen / TEI · :8080</strong><span>Pinned Qwen3-Embedding-0.6B revision · 1,024 dimensions · local model cache · no generation model.</span></aside>
+      <aside class="external mcp"><strong>Optional LiteLLM MCP Gateway · :4001</strong><span>Separate Compose profile, config and credential. Registry is empty; no application consumer or upstream MCP server is implemented.</span></aside>
 
       <article class="card store business-db"><h3>Business PostgreSQL · zhitong + pgvector</h3><p>Product state · BFF/session state · outbox events · ingestion ledger · parent pages · ACL-scoped chunks · vector(1024)</p></article>
       <article class="card store object-store"><h3>Object Storage</h3><p>Persistent local volume or private S3-compatible bucket. Original attachments remain authoritative.</p></article>
@@ -157,7 +162,7 @@
       <article class="card store keys"><h3>RSA key volume</h3><p>Private signing key stays inside Auth Service; public parameters are exposed through JWKS.</p></article>
 
       <div class="repo-note"><strong>Enforced code boundary</strong><span>Routes → services/operators → repository protocols → SQLAlchemy → PostgreSQL · AST tests reject DB access outside repositories.</span></div>
-      <div class="future">Future online retrieval, reranking, citations, model gateway, and answer generation · not implemented</div>
+      <div class="future">Future online retrieval, registered MCP tools, reranking, citations, generation, and production gateway governance · not implemented</div>
     </section>
 
     <footer>

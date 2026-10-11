@@ -1,0 +1,23 @@
+model_list:
+  - model_name: commonplan-embedding-v1
+    litellm_params:
+      model: openai/Qwen/Qwen3-Embedding-0.6B
+      api_base: os.environ/TEI_OPENAI_BASE_URL
+      api_key: os.environ/TEI_API_KEY
+      timeout: 120
+    model_info:
+      mode: embedding
+      base_model: Qwen/Qwen3-Embedding-0.6B
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+
+litellm_settings:
+  drop_params: true
+  turn_off_message_logging: true
+  request_timeout: 120
+
+router_settings:
+  num_retries: 2

@@ -178,13 +178,16 @@ services:
       INGESTION_CHUNK_TOKENS: ${INGESTION_CHUNK_TOKENS:-300}
       INGESTION_CHUNK_OVERLAP_TOKENS: ${INGESTION_CHUNK_OVERLAP_TOKENS:-50}
       INGESTION_DOCLING_MAX_PAGES: ${INGESTION_DOCLING_MAX_PAGES:-500}
-      INGESTION_EMBEDDING_PROVIDER: ${INGESTION_EMBEDDING_PROVIDER:-tei}
+      INGESTION_EMBEDDING_PROVIDER: ${INGESTION_EMBEDDING_PROVIDER:-model_gateway}
       INGESTION_EMBEDDING_MODEL: ${INGESTION_EMBEDDING_MODEL:-Qwen/Qwen3-Embedding-0.6B}
       INGESTION_EMBEDDING_MODEL_REVISION: ${INGESTION_EMBEDDING_MODEL_REVISION:-97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3}
       INGESTION_EMBEDDING_DIMENSIONS: ${INGESTION_EMBEDDING_DIMENSIONS:-1024}
       INGESTION_EMBEDDING_BASE_URL: ${INGESTION_EMBEDDING_BASE_URL:-http://embedding-service}
       INGESTION_EMBEDDING_BATCH_SIZE: ${INGESTION_EMBEDDING_BATCH_SIZE:-3}
       INGESTION_EMBEDDING_TIMEOUT_SECONDS: ${INGESTION_EMBEDDING_TIMEOUT_SECONDS:-120}
+      MODEL_GATEWAY_BASE_URL: ${MODEL_GATEWAY_BASE_URL:-http://model-gateway:4000/v1}
+      MODEL_GATEWAY_API_KEY: ${MODEL_GATEWAY_API_KEY:-sk-local-commonplan-change-me}
+      MODEL_GATEWAY_EMBEDDING_ALIAS: ${MODEL_GATEWAY_EMBEDDING_ALIAS:-commonplan-embedding-v1}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     command: ["python", "-m", "app.ingestion.worker"]
     restart: unless-stopped
@@ -195,8 +198,51 @@ services:
     depends_on:
       backend-migrate:
         condition: service_completed_successfully
+      model-gateway:
+        condition: service_healthy
+
+  model-gateway:
+    image: ${LITELLM_IMAGE:-docker.litellm.ai/berriai/litellm:v1.90.2}
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-local-commonplan-change-me}
+      TEI_OPENAI_BASE_URL: http://embedding-service/v1
+      TEI_API_KEY: ${TEI_API_KEY:-not-required-local}
+    ports:
+      - "127.0.0.1:4000:4000"
+    volumes:
+      - ./deploy/litellm/config.yaml:/app/config.yaml:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness', timeout=5)"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    depends_on:
       embedding-service:
         condition: service_healthy
+    restart: unless-stopped
+
+  # Optional local MCP control plane. It intentionally starts with no upstream
+  # servers: each GitHub/Slack/custom server needs an explicit auth and tool
+  # allowlist review. Start it with: docker compose --profile mcp up -d tool-gateway
+  tool-gateway:
+    profiles: ["mcp"]
+    image: ${LITELLM_IMAGE:-docker.litellm.ai/berriai/litellm:v1.90.2}
+    command: ["--config", "/app/config.yaml", "--port", "4001"]
+    environment:
+      LITELLM_MASTER_KEY: ${MCP_GATEWAY_MASTER_KEY:-sk-local-commonplan-mcp-change-me}
+    ports:
+      - "127.0.0.1:4001:4001"
+    volumes:
+      - ./deploy/litellm/mcp-config.yaml:/app/config.yaml:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4001/health/liveliness', timeout=5)"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
 
   embedding-service:
     image: ${TEI_IMAGE:-ghcr.io/huggingface/text-embeddings-inference:cpu-arm64-1.9}

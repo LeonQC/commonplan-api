@@ -1,0 +1,12 @@
+# MCP is a separate logical and deployment boundary even though it uses the
+# same LiteLLM distribution as the model gateway. Upstream servers are added
+# deliberately with their own OAuth/credential and tool-allowlist review.
+mcp_servers: {}
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  enable_mcp_registry: true
+
+litellm_settings:
+  turn_off_message_logging: true
+

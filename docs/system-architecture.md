@@ -7,6 +7,10 @@ provide the detailed trust boundaries and request sequences behind that overview
 The [target full-system architecture](architecture/commonplan-target-architecture.md) documents the
 recommended production topology, true BFF separation, and staged AI/RAG extension.
 
+The target uses the same LiteLLM distribution for model and MCP capabilities while preserving two
+deployables: a private model gateway and an independently governed tool gateway. The current Compose
+file includes the latter as an optional empty `mcp` profile; no tool integration is implemented yet.
+
 ## Service and trust boundaries
 
 ```mermaid
@@ -42,6 +46,7 @@ flowchart LR
         worker[Ingestion worker]
         docling[Docling + Qwen-tokenized HybridChunker]
         objectstore[(Local/S3-compatible object storage)]
+        gateway[Private LiteLLM Gateway]
         tei[Private Qwen TEI runtime]
         modelcache[(Model and Docling caches)]
     end
@@ -73,7 +78,8 @@ flowchart LR
     appdb -->|Claim file.ready outbox event| worker
     worker -->|Read source bytes| objectstore
     worker --> docling
-    docling -->|Embed canonical chunk text| tei
+    docling -->|Authenticated stable alias| gateway
+    gateway -->|Pinned physical profile| tei
     tei --> modelcache
     worker -->|Persist pages, chunks, status| appdb
 ```
@@ -113,7 +119,8 @@ flowchart LR
     worker -->|verify SHA-256 and read| objects[(Private object storage)]
     worker --> parse[Docling or canonical-text parser]
     parse --> chunk[Qwen-tokenized HybridChunker]
-    chunk -->|canonical text| tei[Private Qwen / TEI]
+    chunk -->|authenticated commonplan-embedding-v1| gateway[Private LiteLLM Gateway]
+    gateway -->|pinned physical model and revision| tei[Private Qwen / TEI]
     tei --> persist[(document_pages + document_chunks vector(1024))]
     worker -->|ready / failed / deleted| status[(document_ingestions + outbox state)]
 ```
@@ -122,7 +129,24 @@ This path is asynchronous and retryable: upload availability does not depend on 
 runtime. The worker is a separate process but still obeys the repository-only database boundary.
 Chunks denormalize workspace/team and exactly one issue/project scope so a future retrieval query can
 apply authorization in the same database statement. The current implementation stops here—there is
-no similarity-search API, query embedder, reranker, citation assembler, or generation model yet.
+no similarity-search API, query embedder, reranker, citation assembler, or generation model yet. The
+gateway currently provides the embedding alias and authenticated routing only.
+
+## Future model and tool gateway flow
+
+```mermaid
+flowchart LR
+    worker[Ingestion worker] -->|embedding alias| model[Private model gateway]
+    rag[AI / RAG service] -->|embedding, rerank, generation| model
+    agent[Agent service] -->|generation| model
+    agent -->|MCP tools and resources| tools[MCP tool gateway]
+    rag -->|optional reviewed tools| tools
+    model --> runtimes[Model runtimes and providers]
+    tools --> servers[Reviewed GitHub, Slack, CommonPlan, or other MCP servers]
+```
+
+Both gateway processes may use LiteLLM, but use distinct configuration, credentials, network/egress
+policy and audit scopes. Product repositories and retrieval storage never move behind the gateway.
 
 ## Password registration and login
 
