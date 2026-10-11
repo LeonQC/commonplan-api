@@ -1,6 +1,6 @@
 # CommonPlan data model and API design
 
-This package contains the implemented schema baseline and the target product schema. [00 — Current implemented schema](00-current-schema-map.md) reflects the current migration heads. Modules 01–07 translate the product design into bounded contexts.
+This package contains the implemented schema baseline and the target product schema. [00 — Current implemented schema](00-current-schema-map.md) reflects the current migration heads. Modules 01–08 translate the product design into bounded contexts.
 
 Delivery order, exit criteria, and local verification are documented in the [CommonPlan implementation milestones](../implementation/milestones.md).
 
@@ -39,6 +39,7 @@ erDiagram
 | GitHub PR linking | [05 — GitHub webhook](05-github-webhook.md) | 4, 14 | P1 |
 | Administration | [06 — Administration](06-administration.md) | 9–13, 15 | Core settings P0; advanced controls later |
 | Attachments and documents | [07 — Attachments](07-attachments.md) | Issue and project details | M9 |
+| RAG ingestion foundation | [08 — RAG ingestion](08-rag-ingestion.md) | Attachment ingestion status; retrieval UI later | M12 ingestion slice |
 | Visual design system | No persistence | 1, 16 | Web-only |
 
 `P0` is the first useful multi-team product; `P1` completes the depicted collaboration loop. “Later” means the UI names a capability but does not yet specify enough behavior to justify a production table or endpoint.
@@ -64,6 +65,7 @@ Paths in this matrix omit the `/api/v1` prefix unless explicitly shown; the GitH
 | Workspace profile and invite/domain rules | `workspaces`, `workspace_settings`, `workspace_allowed_domains` | `GET/PATCH .../settings`, allowed-domain APIs |
 | GitHub PR auto-linking | `github_pull_requests`, `issue_pr_links`, `github_webhook_deliveries` | Signed `POST /webhooks/github`, issue PR read API |
 | Issue and project documents | `file_assets`, typed link tables, `outbox_events` | Initiate/list/complete/download/delete attachment APIs |
+| Document parsing and embeddings | `document_ingestions`, `document_pages`, `document_chunks` | Authorized ingestion-status API; no search API yet |
 | SSO, API keys, billing, import/export, agent settings | Future bounded contexts, not implied by a visual menu | Separate specification before writable endpoints |
 
 ## Assumptions to confirm
@@ -88,4 +90,13 @@ If cross-team projects, guest access, or one GitHub organization shared by multi
 
 ## Remaining implementation gaps
 
-M0–M3 now provide the Auth boundary, workspace/team access, issue planning, and project planning described above. Modules 04–06 remain staged work. `PATCH /users/{id}` still mutates local email/name, but `UserService.provision_identity()` overwrites them from the next JWT; before shipping profile editing, route identity-owned changes through Auth Service and restrict the Business API to preferences and product profile data.
+The implemented baseline now covers the Auth boundary, workspace/team planning, issues/projects,
+Summary, collaboration, saved views/Inbox, GitHub linking, settings, attachments, and the offline RAG
+ingestion slice. Individual module pages deliberately retain later-phase fields and controls marked
+**PROPOSED**; use [00 — Current implemented schema](00-current-schema-map.md), not a target ERD, to
+decide what exists today. Major remaining boundaries are production hardening, scoped agent
+principals/audit, and online RAG retrieval, reranking, citations, and generation.
+
+`PATCH /users/{id}` still mutates local email/name, but `UserService.provision_identity()` overwrites
+them from the next JWT; before shipping profile editing, route identity-owned changes through Auth
+Service and restrict the Business API to preferences and product profile data.

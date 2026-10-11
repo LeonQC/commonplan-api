@@ -38,6 +38,14 @@ flowchart LR
         redis[(Redis disposable cache)]
     end
 
+    subgraph ingestion [Offline ingestion boundary]
+        worker[Ingestion worker]
+        docling[Docling + Qwen-tokenized HybridChunker]
+        objectstore[(Local/S3-compatible object storage)]
+        tei[Private Qwen TEI runtime]
+        modelcache[(Model and Docling caches)]
+    end
+
     google[Google OAuth and OIDC]
 
     react -->|Register, login, refresh, logout| bff
@@ -61,6 +69,13 @@ flowchart LR
     policies --> domain
     domain --> appdb
     domain --> redis
+    domain --> objectstore
+    appdb -->|Claim file.ready outbox event| worker
+    worker -->|Read source bytes| objectstore
+    worker --> docling
+    docling -->|Embed canonical chunk text| tei
+    tei --> modelcache
+    worker -->|Persist pages, chunks, status| appdb
 ```
 
 The private signing key and all credentials stop at the identity boundary. Business API trusts only
@@ -79,12 +94,35 @@ email. Email is a mutable display/contact attribute, not the security identifier
 | Business database | local user/profile linked by issuer + subject | Application-facing representation |
 | Business database | encrypted refresh-token vault, application sessions and future domain entities | BFF credential custody and durable product state |
 | Redis | cached application-session payloads | Disposable acceleration only |
+| Attachment object storage | original private issue/project files | Authoritative bytes for download and re-ingestion |
+| Business database | outbox events, ingestion status, parent pages, ACL-scoped chunks, `vector(1024)` embeddings | Durable offline-ingestion state and future retrieval corpus |
+| Model/Docling cache volumes | pinned Qwen weights, tokenizer and parser assets | Rebuildable local runtime cache; not product authority |
 | Browser memory | short-lived access JWT | Bearer authentication to Business API |
 | Browser HTTP-only cookie | opaque rotating BFF session id | Select a server-side refresh credential without exposing it |
 
 Authentication storage exists only in the Auth Service database. The Business database contains the
 application-facing user projection, browser-session vault, and independent application sessions; it
 does not retain password hashes, provider subjects, or refresh-token ledger rows.
+
+## Attachment and offline-ingestion flow
+
+```mermaid
+flowchart LR
+    complete[Authorized upload completion] -->|one transaction| durable[(file_assets + file.ready outbox)]
+    durable -->|claim with lease| worker[Ingestion worker]
+    worker -->|verify SHA-256 and read| objects[(Private object storage)]
+    worker --> parse[Docling or canonical-text parser]
+    parse --> chunk[Qwen-tokenized HybridChunker]
+    chunk -->|canonical text| tei[Private Qwen / TEI]
+    tei --> persist[(document_pages + document_chunks vector(1024))]
+    worker -->|ready / failed / deleted| status[(document_ingestions + outbox state)]
+```
+
+This path is asynchronous and retryable: upload availability does not depend on Docling or the model
+runtime. The worker is a separate process but still obeys the repository-only database boundary.
+Chunks denormalize workspace/team and exactly one issue/project scope so a future retrieval query can
+apply authorization in the same database statement. The current implementation stops here—there is
+no similarity-search API, query embedder, reranker, citation assembler, or generation model yet.
 
 ## Password registration and login
 

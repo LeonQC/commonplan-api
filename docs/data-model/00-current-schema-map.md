@@ -3,7 +3,7 @@
 This page is the clean implementation baseline for CommonPlan. It contains only the tables and columns that exist after applying the current migration heads:
 
 - Auth DB: `20260910_0002`
-- Business DB: `20261006_0017`
+- Business DB: `20261009_0020`
 
 `IMPLEMENTED` means the table exists in PostgreSQL and has an active SQLAlchemy runtime model. `PROPOSED` means the entity belongs to the target product design but has no migration yet.
 
@@ -98,6 +98,15 @@ erDiagram
     PROJECTS ||--o{ PROJECT_ATTACHMENTS : has
     FILE_ASSETS ||--o| PROJECT_ATTACHMENTS : links
     FILE_ASSETS ||--o{ OUTBOX_EVENTS : emits
+    FILE_ASSETS ||--o| DOCUMENT_INGESTIONS : ingests
+    WORKSPACES ||--o{ DOCUMENT_INGESTIONS : scopes
+    DOCUMENT_INGESTIONS ||--o{ DOCUMENT_PAGES : contains
+    DOCUMENT_INGESTIONS ||--o{ DOCUMENT_CHUNKS : contains
+    DOCUMENT_PAGES ||--o{ DOCUMENT_CHUNKS : parents
+    WORKSPACES ||--o{ DOCUMENT_CHUNKS : scopes
+    TEAMS ||--o{ DOCUMENT_CHUNKS : scopes
+    ISSUES |o--o{ DOCUMENT_CHUNKS : sources
+    PROJECTS |o--o{ DOCUMENT_CHUNKS : sources
 
     USERS {
         integer id PK
@@ -280,7 +289,48 @@ erDiagram
         varchar_24 status
         integer attempts
         timestamptz available_at
+        timestamptz locked_at
+        varchar_120 locked_by
+        text last_error
         timestamptz published_at
+    }
+    DOCUMENT_INGESTIONS {
+        varchar_36 id PK
+        varchar_36 file_asset_id FK, UK
+        varchar_36 workspace_id FK
+        varchar_24 status
+        varchar_80 parser_name
+        varchar_40 parser_version
+        varchar_40 chunker_version
+        varchar_40 embedding_provider
+        varchar_120 embedding_model
+        integer embedding_dimensions
+        varchar_64 content_sha256
+        integer attempts
+        text error_message
+        timestamptz completed_at
+    }
+    DOCUMENT_PAGES {
+        varchar_36 id PK
+        varchar_36 ingestion_id FK
+        integer page_number
+        text heading_path
+        text markdown_content
+        text plain_text
+        integer token_count
+    }
+    DOCUMENT_CHUNKS {
+        varchar_36 id PK
+        varchar_36 ingestion_id FK
+        varchar_36 parent_page_id FK
+        varchar_36 workspace_id FK
+        varchar_36 team_id FK
+        varchar_36 issue_id FK
+        varchar_36 project_id FK
+        integer chunk_index
+        text content
+        vector_1024 embedding
+        jsonb chunk_metadata
     }
 ```
 
@@ -320,7 +370,10 @@ The `(auth_issuer, auth_subject)` badges denote the partial composite unique ind
 | Business | `file_assets` | `FileAsset` | Private object metadata, lifecycle state, and workspace scope |
 | Business | `issue_attachments` | `IssueAttachment` | Foreign-key-safe link from one file asset to an issue |
 | Business | `project_attachments` | `ProjectAttachment` | Foreign-key-safe link from one file asset to a project |
-| Business | `outbox_events` | `OutboxEvent` | Durable lifecycle events for later scanning, indexing, and cleanup workers |
+| Business | `outbox_events` | `OutboxEvent` | Durable lifecycle work queue with lease, retry, error, and publication state |
+| Business | `document_ingestions` | `DocumentIngestion` | Versioned per-file parser/chunker/embedding lifecycle, retry state, and tombstone |
+| Business | `document_pages` | `DocumentPage` | Parsed parent-page Markdown/plain text and heading provenance |
+| Business | `document_chunks` | `DocumentChunk` | ACL-scoped canonical chunk text, provenance, metadata, and `vector(1024)` embedding |
 
 ## Cross-database identity mapping
 
@@ -328,9 +381,11 @@ Auth DB is the source of truth for identity. On the first authenticated Business
 
 Email is not the security join key. The current Business schema keeps it unique for projection consistency, while authentication and authorization continue to use the immutable issuer/subject pair.
 
-## Proposed product schema
+## Detailed module design
 
-The following modules introduce `PROPOSED` entities and APIs. References to Business `users` reuse the implemented table above.
+The following modules mix implemented records with explicitly marked **PROPOSED** follow-ups.
+References to Business `users` reuse the implemented table above; the catalog above remains the
+authoritative list of tables that exist today.
 
 | Module | Proposed scope |
 | --- | --- |
@@ -340,6 +395,8 @@ The following modules introduce `PROPOSED` entities and APIs. References to Busi
 | [04 — Views and notifications](04-views-notifications.md) | Saved views, inbox notifications, and aggregate read models |
 | [05 — GitHub webhook](05-github-webhook.md) | Pull-request snapshots, issue links, and webhook delivery deduplication |
 | [06 — Administration](06-administration.md) | Workspace settings, allowed domains, and audit events |
+| [07 — Attachments](07-attachments.md) | Implemented private attachment metadata, typed resource links, signed object access, and outbox events |
+| [08 — RAG ingestion](08-rag-ingestion.md) | Implemented offline parsing/chunking/embedding foundation; online retrieval remains proposed |
 
 ## Current design constraints
 
