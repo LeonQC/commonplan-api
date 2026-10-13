@@ -12,7 +12,7 @@
       --rose:#ad4d62; --roseSoft:#fff0f3; --slate:#f4f6fa;
     }
     * { box-sizing:border-box; }
-    html,body { margin:0; min-width:1600px; min-height:1360px; background:#f7f8fc; color:var(--ink); font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    html,body { margin:0; min-width:1600px; min-height:1490px; background:#f7f8fc; color:var(--ink); font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
     body { padding:46px 58px 50px; }
     main { width:1484px; margin:0 auto; }
     header { display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:24px; }
@@ -81,7 +81,7 @@
     .ownership-rule { margin:12px 0 0; padding:9px 12px; border-radius:9px; background:#f6f7fa; color:#666c7e; font-size:8px; text-align:center; }
     .ownership-rule strong { color:#414758; }
 
-    .future { min-height:365px; background:#fbfaff; border-color:#e1def9; }
+    .future { min-height:475px; background:#fbfaff; border-color:#e1def9; }
     .future .node { min-height:88px; padding:14px 15px; border-color:#a79eed; background:#f5f3ff; color:#5d52bc; }
     .future .node h2 { font-size:13px; }
     .future .queue { border-style:dashed; border-color:#d1a04a; background:#fffaf0; color:#8c6117; }
@@ -99,6 +99,9 @@
     .online-flow .core-source { width:205px; }
     .online-flow .rag-service { width:625px; }
     .online-flow .llm { width:255px; }
+    .tool-flow .agent-service { width:300px; }
+    .tool-flow .tool-gateway { width:480px; border-style:dashed; }
+    .tool-flow .mcp-servers { width:325px; border-style:dashed; border-color:#d1a04a; background:#fffaf0; color:#8c6117; }
     .rag-steps { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-top:9px; }
     .rag-steps span { padding:7px 6px; border:1px solid #d5cff7; border-radius:8px; background:white; color:#5f57a1; font-size:7px; font-weight:720; line-height:1.3; text-align:center; }
     .rag-foot { margin-top:7px !important; color:#716b91 !important; font-size:7px !important; }
@@ -123,7 +126,7 @@
 <body>
 <main>
   <header>
-    <div><span class="eyebrow">KEY-7 · Target architecture</span><h1>CommonPlan · Expected Full-System Picture</h1><p>A layered production view: request path, service-owned data, staged AI/RAG, and deployment foundation.</p></div>
+    <div><span class="eyebrow">KEY-7 / KEY-11 · Target architecture</span><h1>CommonPlan · Expected Full-System Picture</h1><p>A layered production view: request path, service-owned data, staged AI/RAG, and deployment foundation.</p></div>
     <div class="meta"><strong>Target state · deployment view</strong><span>Read each lane from left to right</span><span>Planned and proposed components are explicitly labelled</span></div>
   </header>
 
@@ -161,7 +164,7 @@
 
     <section class="lane future">
       <div class="lane-label"><b>03</b>Async + AI</div>
-      <h2 class="lane-title">AI / RAG platform: indexing and retrieval</h2><p class="lane-subtitle">Two execution planes share the retrieval corpus and model gateway: asynchronous indexing plus low-latency, permission-aware retrieval.</p>
+      <h2 class="lane-title">AI / RAG platform: indexing, retrieval, models, and tools</h2><p class="lane-subtitle">Offline ingestion and online AI share model aliases; reviewed agent tools use a separate MCP security plane.</p>
 
       <div class="pipeline">
         <div class="pipeline-label">Ingestion<span>offline path</span></div>
@@ -170,9 +173,9 @@
           <div class="flow-arrow dashed"><span>index job</span></div>
           <article class="card node queue ingest-queue"><span class="badge proposed">Technology TBD</span><h2>Event Bus / Queue</h2><p>Retries, dead letters, deduplication, and back-pressure.</p></article>
           <div class="flow-arrow dashed"><span>consume</span></div>
-          <article class="card node ingest-worker"><span class="badge implemented">Implemented</span><h2>Ingestion Workers</h2><p>Load object · Docling parse · Qwen-tokenized HybridChunker · call private TEI · version · persist.</p></article>
+          <article class="card node ingest-worker"><span class="badge implemented">Worker + alias implemented</span><h2>Ingestion Workers</h2><p>Load object · Docling parse · Qwen-tokenized HybridChunker · authenticated stable embedding alias · version · persist.</p></article>
           <div class="flow-arrow dashed"><span>upsert</span></div>
-          <article class="card node ingest-corpus"><span class="badge proposed">Proposed corpus</span><h2>Retrieval Corpus</h2><p>Object Storage for artifacts · PostgreSQL full-text + pgvector for chunks, ACL metadata, and embedding vectors.</p></article>
+          <article class="card node ingest-corpus"><span class="badge existing">Index foundation implemented</span><h2>Retrieval Corpus</h2><p>Object storage and ACL-scoped pgvector chunks exist. Full-text/vector indexes and authorized retrieval queries remain proposed.</p></article>
         </div>
       </div>
 
@@ -182,8 +185,19 @@
           <article class="card node core-source"><span class="badge existing">Caller</span><h2>Business API</h2><p>Sends user, workspace, team, query, filters, and authorization context.</p></article>
           <div class="flow-arrow dashed"><span>authorized query</span></div>
           <article class="card node rag-service"><span class="badge proposed">Proposed RAG</span><h2>AI / RAG Service</h2><div class="rag-steps"><span>1 · Query rewrite + embedding</span><span>2 · ACL-aware hybrid search</span><span>3 · RRF / rerank + dedupe</span><span>4 · Context + citations</span></div><p class="rag-foot">Reads PostgreSQL FTS + pgvector with mandatory workspace/team ACL filters; returns a grounded answer with source references.</p></article>
-          <div class="flow-arrow dashed"><span>prompt / response</span></div>
-          <article class="card node llm"><span class="badge implemented">Embedding implemented</span><h2>Shared Model Gateway</h2><p>Pinned Qwen3-Embedding-0.6B via private TEI produces 1024-dimensional document vectors; retrieval must use the same profile for query vectors. Generation model remains separate and receives only authorized context.</p></article>
+          <div class="flow-arrow dashed"><span>private model API</span></div>
+          <article class="card node llm"><span class="badge implemented">Local embedding path</span><h2>Model Gateway + Runtimes</h2><p>LiteLLM alias routing to pinned Qwen/TEI is implemented locally. Production virtual keys, budgets, persistence, HA, generation and reranking remain planned; Bifrost stays a qualified alternative.</p></article>
+        </div>
+      </div>
+
+      <div class="pipeline">
+        <div class="pipeline-label">Tool plane<span>agent actions</span></div>
+        <div class="flow tool-flow">
+          <article class="card node agent-service"><span class="badge proposed">Proposed consumer</span><h2>AI / RAG + Agent Services</h2><p>Establish caller and workspace scope, decide when a tool is allowed, and keep product authorization outside the gateway.</p></article>
+          <div class="flow-arrow dashed"><span>MCP tools/resources</span></div>
+          <article class="card node tool-gateway"><span class="badge implemented">Deployable foundation</span><h2>LiteLLM MCP Tool Gateway</h2><p>Separate process, port, credential, registry, egress and audit boundary. Local registry starts empty; model-provider secrets never enter this deployment.</p></article>
+          <div class="flow-arrow dashed"><span>reviewed upstream</span></div>
+          <article class="card node mcp-servers"><span class="badge proposed">Register deliberately</span><h2>MCP Servers</h2><p>GitHub · Slack · CommonPlan · future tools. Each needs OAuth/service auth, tool allowlists, approval and audit policy.</p></article>
         </div>
       </div>
     </section>
@@ -200,7 +214,7 @@
   </section>
 
   <footer>
-    <div class="principles"><div class="principle"><b>Browser → BFF only</b><span>The browser sends a secure session cookie; the BFF performs refresh and private API calls.</span></div><div class="principle"><b>Private service plane</b><span>Core, Auth internals, AI, workers, queues, Redis, and databases are not public.</span></div><div class="principle"><b>Evolution, not rewrite</b><span>Core and Auth survive. BFF moves out first; async and RAG arrive behind stable interfaces.</span></div><div class="principle"><b>Honest uncertainty</b><span>Queue, cloud, model provider, and container platform remain decisions, not fictional implementation.</span></div></div>
+    <div class="principles"><div class="principle"><b>Browser → BFF only</b><span>The browser sends a secure session cookie; the BFF performs refresh and private API calls.</span></div><div class="principle"><b>Models and tools stay separate</b><span>One LiteLLM distribution, two deployables: private model aliases and separately governed MCP tools.</span></div><div class="principle"><b>Evolution, not rewrite</b><span>Core and Auth survive. BFF moves out first; async and RAG arrive behind stable interfaces.</span></div><div class="principle"><b>Embedding stability</b><span>No cross-model fallback: a new vector space requires a versioned alias and re-index plan.</span></div></div>
     <div class="legend"><strong>Delivery maturity</strong><div class="legend-row"><span class="key ex">Existing</span><span class="key pl">Planned split</span><span class="key pr">Proposed RAG</span><span class="key ma">Managed infra</span></div><span>Dashed connectors represent external or asynchronous interaction.</span></div>
   </footer>
 </main>

@@ -8,19 +8,24 @@ retrieval or answer-generation behavior.
 ## 1. Start the ingestion stack
 
 ```bash
-docker compose up --build db redis auth-service embedding-service backend ingestion-worker
+docker compose up --build db redis auth-service embedding-service model-gateway backend ingestion-worker
 ```
 
 The database image includes pgvector. Alembic enables the extension and changes
 `document_chunks.embedding` from the temporary JSONB representation to the
 canonical `vector(1024)` type. The first start downloads the pinned Qwen model
-and Docling assets into persistent volumes. Wait for the TEI health endpoint:
+and Docling assets into persistent volumes. Wait for both runtime boundaries:
 
 ```bash
 curl --fail http://localhost:8080/health
+curl --fail http://localhost:4000/health/liveliness
 ```
 
-The local embedding endpoint is bound to `127.0.0.1` only. The conservative CPU defaults (`3` inputs and `1,024` scheduled tokens per batch) keep Qwen warm-up practical on a development laptop; tune `INGESTION_EMBEDDING_BATCH_SIZE`, `TEI_MAX_BATCH_TOKENS`, `TEI_MAX_CONCURRENT_REQUESTS`, and `TEI_TOKENIZATION_WORKERS` for a GPU deployment.
+Both local model endpoints are bound to `127.0.0.1` only. The worker calls LiteLLM at
+`http://model-gateway:4000/v1`, not TEI directly. The conservative CPU defaults (`3` inputs and
+`1,024` scheduled tokens per batch) keep Qwen warm-up practical on a development laptop; tune
+`INGESTION_EMBEDDING_BATCH_SIZE`, `TEI_MAX_BATCH_TOKENS`, `TEI_MAX_CONCURRENT_REQUESTS`, and
+`TEI_TOKENIZATION_WORKERS` for a GPU deployment.
 
 Apple Silicon uses the default ARM64 image. On x86_64 set:
 
@@ -80,16 +85,31 @@ to `pending` only in a disposable local database, or upload the file again. The
 worker's lease, attempt count, and exponential backoff are visible in
 `outbox_events`; process restart must not lose the job.
 
-## 5. Verify the embedding service directly
+## 5. Verify the gateway alias
 
 ```bash
-curl http://localhost:8080/embed \
+curl http://localhost:4000/v1/embeddings \
+  -H 'Authorization: Bearer sk-local-commonplan-change-me' \
   -H 'Content-Type: application/json' \
-  -d '{"inputs":["CommonPlan links issues to project knowledge."],"normalize":true}' \
-  | python -c 'import json,sys; v=json.load(sys.stdin)[0]; print(len(v), round(sum(x*x for x in v), 6))'
+  -d '{"model":"commonplan-embedding-v1","input":["CommonPlan links issues to project knowledge."],"encoding_format":"float"}' \
+  | python -c 'import json,sys; v=json.load(sys.stdin)["data"][0]["embedding"]; print(len(v), round(sum(x*x for x in v), 6))'
 ```
 
 Expected output is `1024 1.0` (subject only to floating-point rounding).
+
+To prove the gateway has not changed vector semantics relative to the pinned direct runtime, run:
+
+```bash
+python scripts/verify-model-gateway.py
+```
+
+The command requires 1,024 dimensions, normalized output, and cosine similarity of at least
+`0.99999` between direct TEI and the gateway path. CI/runtime suites can additionally enable
+`test_gateway_embedding_is_conformant_with_direct_tei` with `TEI_RUNTIME_URL`,
+`MODEL_GATEWAY_RUNTIME_URL`, and `MODEL_GATEWAY_API_KEY`.
+
+Production must replace the local shared key with a restricted LiteLLM virtual/service key stored in
+Secret Manager. The master key must not be issued to application workloads.
 
 ## What this does not validate
 

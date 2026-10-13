@@ -247,6 +247,12 @@ Exit demo:
 
 Scope is intentionally deferred until concrete agent use cases are approved. The foundation must distinguish human and agent principals, use explicit scopes, record execution/audit metadata, and pass through the same workspace/team/resource authorization boundary. An AI integration must never gain ambient access merely because it runs inside CommonPlan.
 
+Model calls and tool calls use separate gateway boundaries. The optional LiteLLM MCP gateway profile
+is deployable scaffolding only; M11 must define each upstream MCP server's owner, OAuth/service
+credential custody, workspace/user propagation, allowed tools/resources, approval behavior, audit
+fields and egress policy before registration. Permission to call a model alias never grants tool
+discovery or execution.
+
 ## M12 — RAG ingestion and retrieval
 
 **Status:** ingestion slice implemented in KEY-11 and under review; online retrieval, citations, and
@@ -262,6 +268,12 @@ Delivery is split into two reviewable vertical slices:
   fusion, reranking, citations, and bilingual evaluation fixtures. The pgvector storage foundation is
   implemented; retrieval is not shipped until an authorized search API and its quality/security tests
   exist.
+- Model access boundary: the local ingestion path now calls the separately deployed,
+  OpenAI-compatible LiteLLM Gateway described in the
+  [model-gateway decision](../architecture/model-gateway-decision.md). Ingestion uses the immutable
+  `commonplan-embedding-v1` alias; future query embedding must reuse it. A new vector space requires a
+  new alias and re-ingestion rather than silent fallback. Production gateway persistence, restricted
+  virtual keys, budgets, and HA remain deployment work.
 
 ## Verification loop for every milestone
 

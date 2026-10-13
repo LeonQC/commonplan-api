@@ -11,7 +11,9 @@ authenticated upload completion
   -> reads object storage and verifies SHA-256
   -> Docling parses layout, reading order, tables, OCR, pages, and headings
   -> Docling HybridChunker uses the pinned Qwen tokenizer (300-token maximum)
-  -> private TEI service produces normalized 1024-dimensional Qwen vectors
+  -> authenticated model client calls commonplan-embedding-v1 on private LiteLLM Gateway
+  -> gateway routes only to the pinned TEI/Qwen revision
+  -> normalized 1024-dimensional Qwen vectors return to the worker
   -> document_pages + document_chunks + document_ingestions(status=ready)
   -> outbox event becomes published
 ```
@@ -56,7 +58,7 @@ the union of source-page provenance, and the new chunker version. Search must th
 neighbor hits before assembling context. A cross-heading, cross-table, or cross-resource overlap is
 never permitted.
 
-The canonical embedding profile is `Qwen/Qwen3-Embedding-0.6B` at revision `97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3`, served privately by TEI 1.9. The worker sends bounded batches, validates the response count and dimensions, rejects zero/non-finite vectors, normalizes defensively, and persists `vector(1024)`. Model ID, immutable revision, and dimensions are part of the durable ingestion identity. Local CPU defaults use three chunks per client batch and a 1,024-token scheduler budget because CommonPlan chunks are capped at 300 tokens; GPU deployments can raise both through environment variables. `local_hash` remains available only when explicitly selected for isolated tests; the factory never silently falls back to it.
+The canonical embedding profile is `Qwen/Qwen3-Embedding-0.6B` at revision `97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3`, served privately by TEI 1.9 behind the `commonplan-embedding-v1` LiteLLM alias. The worker authenticates to the gateway, sends bounded OpenAI-compatible batches, validates indexes/count/dimensions, rejects zero/non-finite vectors, normalizes defensively, and persists `vector(1024)`. The durable ingestion identity records both alias and immutable physical model/revision, so repointing an alias cannot make incompatible vectors look current. Local CPU defaults use three chunks per client batch and a 1,024-token scheduler budget because CommonPlan chunks are capped at 300 tokens; GPU deployments can raise both through environment variables. Direct `tei` and deterministic `local_hash` adapters remain explicit diagnostic/test options; the factory never silently falls back.
 
 The model weights and Docling assets use persistent Docker volumes. After the first successful download, restarts do not fetch them again. ARM64 local development uses TEI's `cpu-arm64-1.9` image; x86_64 deployments must set `TEI_IMAGE=ghcr.io/huggingface/text-embeddings-inference:cpu-1.9`.
 
@@ -69,7 +71,7 @@ This phase intentionally creates no vector similarity index and exposes no simil
 - `GET /api/v1/workspaces/{workspace_id}/files/{file_id}/ingestion` returns `not_started`, current stage, counts, adapter versions, or failure details after normal resource authorization.
 - `python -m app.ingestion.worker` runs continuously.
 - `python -m app.ingestion.worker --once` claims at most one event for deterministic local verification.
-- Docker Compose starts `embedding-service` and the heavier `ingestion-worker` image separately from the Business API. Docling dependencies never enter the latency-sensitive API image.
+- Docker Compose starts `embedding-service`, `model-gateway`, and the heavier `ingestion-worker` image separately from the Business API. Docling and gateway dependencies never enter the latency-sensitive API image.
 - [`../implementation/ingestion-verification.md`](../implementation/ingestion-verification.md) provides the upload, status, SQL inspection, invariant, and recovery checks used to accept this phase before retrieval begins.
 
 The service layer never receives a SQLAlchemy session. All claims, reads, writes, retries and counts stay inside `IngestionRepository`.

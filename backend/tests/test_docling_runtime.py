@@ -10,7 +10,7 @@ docling = pytest.importorskip("docling")
 from docx import Document
 
 from app.ingestion.chunking import chunk_document
-from app.ingestion.embeddings import TEIEmbeddingProvider
+from app.ingestion.embeddings import ModelGatewayEmbeddingProvider, TEIEmbeddingProvider
 from app.ingestion.parsers import ParserRegistry
 
 
@@ -65,3 +65,33 @@ def test_docling_chunks_embed_with_canonical_qwen_profile():
     assert len(vectors) == len(chunks)
     assert all(len(vector) == 1024 for vector in vectors)
     assert all(math.isclose(sum(value * value for value in vector), 1.0) for vector in vectors)
+
+
+@pytest.mark.skipif(
+    not os.getenv("TEI_RUNTIME_URL") or not os.getenv("MODEL_GATEWAY_RUNTIME_URL"),
+    reason="requires live TEI and model gateway services",
+)
+def test_gateway_embedding_is_conformant_with_direct_tei():
+    texts = [
+        "Issue attachments become permission-scoped retrieval evidence.",
+        "CommonPlan preserves citation provenance across document ingestion.",
+    ]
+    direct = TEIEmbeddingProvider(
+        os.environ["TEI_RUNTIME_URL"],
+        "Qwen/Qwen3-Embedding-0.6B",
+        "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
+        1024,
+    ).embed(texts)
+    gateway = ModelGatewayEmbeddingProvider(
+        os.environ["MODEL_GATEWAY_RUNTIME_URL"],
+        os.environ.get("MODEL_GATEWAY_API_KEY", "sk-local-commonplan-change-me"),
+        "commonplan-embedding-v1",
+        "Qwen/Qwen3-Embedding-0.6B",
+        "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
+        1024,
+    ).embed(texts)
+
+    assert len(gateway) == len(direct)
+    for direct_vector, gateway_vector in zip(direct, gateway, strict=True):
+        cosine = sum(a * b for a, b in zip(direct_vector, gateway_vector, strict=True))
+        assert cosine > 0.99999
