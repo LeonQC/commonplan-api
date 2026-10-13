@@ -42,6 +42,7 @@ services:
   backend-migrate:
     build:
       context: ./backend
+      target: api
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://zhitong:zhitong@db:5432/zhitong}
     command: ["alembic", "upgrade", "head"]
@@ -106,6 +107,7 @@ services:
   backend:
     build:
       context: ./backend
+      target: api
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://zhitong:zhitong@db:5432/zhitong}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
@@ -158,6 +160,7 @@ services:
   ingestion-worker:
     build:
       context: ./backend
+      target: ingestion
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://zhitong:zhitong@db:5432/zhitong}
       OBJECT_STORAGE_DRIVER: ${OBJECT_STORAGE_DRIVER:-local}
@@ -174,20 +177,103 @@ services:
       INGESTION_ALLOW_UNSCANNED: ${INGESTION_ALLOW_UNSCANNED:-true}
       INGESTION_CHUNK_TOKENS: ${INGESTION_CHUNK_TOKENS:-300}
       INGESTION_CHUNK_OVERLAP_TOKENS: ${INGESTION_CHUNK_OVERLAP_TOKENS:-50}
-      INGESTION_EMBEDDING_PROVIDER: ${INGESTION_EMBEDDING_PROVIDER:-local_hash}
-      INGESTION_EMBEDDING_MODEL: ${INGESTION_EMBEDDING_MODEL:-local-hash-v1}
-      INGESTION_EMBEDDING_DIMENSIONS: ${INGESTION_EMBEDDING_DIMENSIONS:-384}
+      INGESTION_DOCLING_MAX_PAGES: ${INGESTION_DOCLING_MAX_PAGES:-500}
+      INGESTION_EMBEDDING_PROVIDER: ${INGESTION_EMBEDDING_PROVIDER:-model_gateway}
+      INGESTION_EMBEDDING_MODEL: ${INGESTION_EMBEDDING_MODEL:-Qwen/Qwen3-Embedding-0.6B}
+      INGESTION_EMBEDDING_MODEL_REVISION: ${INGESTION_EMBEDDING_MODEL_REVISION:-97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3}
+      INGESTION_EMBEDDING_DIMENSIONS: ${INGESTION_EMBEDDING_DIMENSIONS:-1024}
+      INGESTION_EMBEDDING_BASE_URL: ${INGESTION_EMBEDDING_BASE_URL:-http://embedding-service}
+      INGESTION_EMBEDDING_BATCH_SIZE: ${INGESTION_EMBEDDING_BATCH_SIZE:-3}
+      INGESTION_EMBEDDING_TIMEOUT_SECONDS: ${INGESTION_EMBEDDING_TIMEOUT_SECONDS:-120}
+      MODEL_GATEWAY_BASE_URL: ${MODEL_GATEWAY_BASE_URL:-http://model-gateway:4000/v1}
+      MODEL_GATEWAY_API_KEY: ${MODEL_GATEWAY_API_KEY:-sk-local-commonplan-change-me}
+      MODEL_GATEWAY_EMBEDDING_ALIAS: ${MODEL_GATEWAY_EMBEDDING_ALIAS:-commonplan-embedding-v1}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     command: ["python", "-m", "app.ingestion.worker"]
     restart: unless-stopped
     volumes:
       - ./backend/app:/app/app
       - attachment_data:/var/lib/commonplan/attachments
+      - docling_cache:/root/.cache
     depends_on:
       backend-migrate:
         condition: service_completed_successfully
+      model-gateway:
+        condition: service_healthy
+
+  model-gateway:
+    image: ${LITELLM_IMAGE:-docker.litellm.ai/berriai/litellm:v1.90.2}
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-local-commonplan-change-me}
+      TEI_OPENAI_BASE_URL: http://embedding-service/v1
+      TEI_API_KEY: ${TEI_API_KEY:-not-required-local}
+    ports:
+      - "127.0.0.1:4000:4000"
+    volumes:
+      - ./deploy/litellm/config.yaml:/app/config.yaml:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness', timeout=5)"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    depends_on:
+      embedding-service:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Optional local MCP control plane. It intentionally starts with no upstream
+  # servers: each GitHub/Slack/custom server needs an explicit auth and tool
+  # allowlist review. Start it with: docker compose --profile mcp up -d tool-gateway
+  tool-gateway:
+    profiles: ["mcp"]
+    image: ${LITELLM_IMAGE:-docker.litellm.ai/berriai/litellm:v1.90.2}
+    command: ["--config", "/app/config.yaml", "--port", "4001"]
+    environment:
+      LITELLM_MASTER_KEY: ${MCP_GATEWAY_MASTER_KEY:-sk-local-commonplan-mcp-change-me}
+    ports:
+      - "127.0.0.1:4001:4001"
+    volumes:
+      - ./deploy/litellm/mcp-config.yaml:/app/config.yaml:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4001/health/liveliness', timeout=5)"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+
+  embedding-service:
+    image: ${TEI_IMAGE:-ghcr.io/huggingface/text-embeddings-inference:cpu-arm64-1.9}
+    command:
+      - --model-id
+      - ${INGESTION_EMBEDDING_MODEL:-Qwen/Qwen3-Embedding-0.6B}
+      - --revision
+      - ${INGESTION_EMBEDDING_MODEL_REVISION:-97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3}
+      - --max-client-batch-size
+      - ${INGESTION_EMBEDDING_BATCH_SIZE:-3}
+      - --max-batch-tokens
+      - ${TEI_MAX_BATCH_TOKENS:-1024}
+      - --max-concurrent-requests
+      - ${TEI_MAX_CONCURRENT_REQUESTS:-8}
+      - --tokenization-workers
+      - ${TEI_TOKENIZATION_WORKERS:-2}
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - embedding_model_cache:/data
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 90s
+    restart: unless-stopped
 
 volumes:
   postgres_data:
   auth_signing_keys:
   attachment_data:
+  docling_cache:
+  embedding_model_cache:

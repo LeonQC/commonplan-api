@@ -40,7 +40,7 @@ GROUP BY i.id, i.file_asset_id, i.status, i.completed_at
 ORDER BY i.completed_at DESC NULLS LAST
 LIMIT 20;
 
--- 3. Human-readable chunk samples. This verifies parser metadata, overlap
+-- 3. Human-readable chunk samples. This verifies parser metadata, structure
 --    output, ACL scope, and a non-empty vector without doing retrieval.
 SELECT
     i.file_asset_id,
@@ -52,6 +52,7 @@ SELECT
     c.team_id,
     coalesce(c.issue_id, c.project_id) AS resource_id,
     c.token_count,
+    c.chunk_metadata->>'strategy' AS chunk_strategy,
     vector_dims(c.embedding) AS vector_dims,
     round(vector_norm(c.embedding)::numeric, 6) AS vector_norm,
     left(c.content, 160) AS content_sample

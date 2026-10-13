@@ -34,11 +34,11 @@ data proves that boundary is valuable.
 ### 4. Add an async foundation only when RAG ingestion needs it
 
 The target needs durable background jobs for attachments, embeddings, retries, notifications, and
-scheduled work. The diagram deliberately says **Event Bus / Job Queue (technology TBD)**. Kafka should
-not be selected merely because the reference design uses it; a managed queue or Redis-backed worker
-may be sufficient at initial load.
+scheduled work. The diagram distinguishes today's PostgreSQL outbox from a future queue. Kafka should
+not be selected merely because the reference design uses it; a managed queue or the existing leased
+outbox may be sufficient at initial load.
 
-### 5. Add RAG as two deployable responsibilities
+### 5. Add RAG with explicit application, data, and model-runtime boundaries
 
 - **Ingestion & Background Workers**: consume durable index jobs; load original objects; parse,
   normalize, chunk, embed, version, and upsert full-text/vector indexes; retry idempotently.
@@ -46,18 +46,63 @@ may be sufficient at initial load.
   rewrite and embed the query; enforce metadata ACL filters during hybrid full-text/vector search;
   fuse results with RRF, rerank and deduplicate; assemble cited context; call the model gateway; and
   return a grounded answer with source references.
-- **Shared Model Gateway**: give indexing workers and the online service one provider-neutral interface.
-  Workers call its embedding model for document chunks; online retrieval calls the same compatible
-  embedding model for query vectors and calls the generation model only after authorization-filtered
-  context has been assembled.
+- **Private Model Gateway**: local ingestion now calls a separately deployed,
+  OpenAI-compatible LiteLLM gateway instead of calling TEI directly. Production still needs the
+  database-backed key/budget control plane and highly available deployment described below. Bifrost
+  remains a gateway-neutral alternative to validate with the same conformance/load suite. The gateway
+  owns provider credentials, stable model
+  aliases, retries, routing, budgets and call telemetry. It does not own prompts, ACL decisions,
+  retrieval, citations, or model weights. Workers and online retrieval use the same pinned
+  `commonplan-embedding-v1` alias, backed only by the exact Qwen revision and 1024-dimensional profile;
+  it may never silently fall back to a different embedding model. Generation is a separate alias and
+  is called only after authorization-filtered context has been assembled. See the
+  [model gateway decision](model-gateway-decision.md).
+- **Independent model runtimes**: the embedding runtime is the implemented Qwen/TEI deployable.
+  Future reranker and generation runtimes are separate workloads with independent capacity, health,
+  and release lifecycles. They sit behind distinct aliases and may use TEI, vLLM, a local runtime, or
+  an approved provider as appropriate; LiteLLM routes to them but does not execute their models.
+- **MCP Tool Gateway**: use LiteLLM's MCP capability as a second logical and deployable gateway, not
+  as an extra route inside the model-credential boundary. Agent/AI services use it to discover and
+  invoke reviewed MCP tools, resources and prompts. Every upstream server needs explicit OAuth or
+  service credentials, workspace/user scope propagation, tool allowlists, approval policy, audit and
+  egress controls. The repository provides an optional empty local deployment; no upstream tool is
+  considered implemented merely because the gateway can start.
 
 The initial vector index can use `pgvector` alongside product metadata in Business PostgreSQL. Original
 attachments and parsing artifacts belong in object storage. A separate vector database should be
 introduced only after measured scale or retrieval requirements justify it.
 
+The **Retrieval Corpus** in the visual is a data boundary—object storage, PostgreSQL full-text data,
+ACL metadata, and pgvector chunks—not an independently deployed microservice. Ingestion Worker writes
+it through repositories and AI/RAG Service reads it with mandatory authorization predicates.
+
+Current delivery status is narrower than this target: object storage, parent pages, ACL-scoped chunks,
+canonical pgvector embeddings, and the local LiteLLM-to-TEI embedding path are implemented.
+Full-text/vector search indexes, query embedding, authorized candidate retrieval, reranking,
+citations, generation, and the production gateway control plane are not. See the staged production
+work in the [model gateway decision](model-gateway-decision.md).
+
 Ingestion and online retrieval are intentionally separate paths. A document may be indexed again
 without blocking user requests, while every online retrieval must apply workspace/team authorization
 before any retrieved text is placed in a model prompt.
+
+### 6. Use one gateway product, with separate model and tool deployables
+
+LiteLLM and Bifrost can both package model routing and MCP aggregation. CommonPlan should reuse one
+gateway product and its operational tooling, while deploying two security boundaries:
+
+```text
+Ingestion Worker ───────────────┐
+                               ├── Model Gateway ── embedding / generation / rerank models
+AI/RAG and Agent Services ──────┤
+                               └── MCP Tool Gateway ── GitHub / Slack / CommonPlan MCP servers
+```
+
+Local Compose may run both processes together, on separate ports and with separate credentials.
+Production should deploy them independently: the model gateway remains private with provider secrets;
+the MCP gateway has its own egress, OAuth callbacks, tool permissions and audit surface. Product data,
+retrieval indexes and object storage are still accessed through CommonPlan APIs/repositories—not
+through either gateway.
 
 ## Public and private routing
 
@@ -69,7 +114,8 @@ before any retrieved text is placed in a model prompt.
 | `/webhooks/github` | Business API webhook receiver | Signature, owner, delivery-id, and event validation before processing. |
 
 Core product APIs, Auth internal token endpoints, AI/RAG, workers, databases, Redis, queues, and object
-storage are private service-plane resources.
+storage are private service-plane resources. The MCP gateway also remains private unless a reviewed
+external MCP client requires its `/mcp` endpoint; that exposure must not also expose the model gateway.
 
 ## Staged delivery
 
@@ -80,7 +126,7 @@ storage are private service-plane resources.
 3. **Async and attachment foundation** — object storage, job/event abstraction, idempotent workers,
    retry/dead-letter behavior, and attachment status tracking.
 4. **RAG platform** — full-text + vector indexing, ingestion workers, AI/RAG service, model gateway,
-   evaluation data, feedback, security filters, and cost/latency observability.
+   MCP tool gateway, evaluation data, feedback, security filters, and cost/latency observability.
 
 The editable visual source is
 [`commonplan-target-architecture.html`](commonplan-target-architecture.html). Compare it with the

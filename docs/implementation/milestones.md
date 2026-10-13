@@ -28,11 +28,11 @@ This plan delivers CommonPlan as runnable vertical slices across the `commonplan
 | M9 — Attachments and document foundation | Secure Issue/Project uploads, private object storage, lifecycle events | M2, M3 | Upload, download, and remove an authorized attachment |
 | M10 — Hardening and release | E2E coverage, pagination, concurrency, observability, deployment readiness | M1–M9 | Critical flows pass automatically and survive service restart |
 | M11 — AI foundation | Scoped agent identities, permissions, context, and execution audit | M10 | An agent performs an explicitly authorized work-item action with audit trail |
-| M12 — RAG ingestion and retrieval | Async document extraction, chunking, indexing, scoped retrieval | M9, M11 | A ready document becomes searchable only inside its authorized scope |
+| M12 — RAG ingestion and retrieval | Async document extraction, chunking, indexing, scoped retrieval | M9; M11 only for agent-facing actions | A ready document becomes searchable only inside its authorized scope |
 
 ## M0 — Platform baseline
 
-**Status:** implemented on the current design/auth branch and locally validated; publication remains part of the normal PR review flow.
+**Status:** implemented and merged; later milestones continue to use this Auth/Business boundary.
 
 Scope:
 
@@ -209,6 +209,9 @@ Exit demo:
 
 ## M9 — Attachments and document foundation
 
+**Status:** implemented. Production malware scanning and byte-level MIME detection remain explicit
+deployment gates rather than silently assumed capabilities.
+
 Scope:
 
 - Add `file_assets`, `issue_attachments`, `project_attachments`, and a durable `outbox_events` boundary.
@@ -244,14 +247,33 @@ Exit demo:
 
 Scope is intentionally deferred until concrete agent use cases are approved. The foundation must distinguish human and agent principals, use explicit scopes, record execution/audit metadata, and pass through the same workspace/team/resource authorization boundary. An AI integration must never gain ambient access merely because it runs inside CommonPlan.
 
+Model calls and tool calls use separate gateway boundaries. The optional LiteLLM MCP gateway profile
+is deployable scaffolding only; M11 must define each upstream MCP server's owner, OAuth/service
+credential custody, workspace/user propagation, allowed tools/resources, approval behavior, audit
+fields and egress policy before registration. Permission to call a model alias never grants tool
+discovery or execution.
+
 ## M12 — RAG ingestion and retrieval
+
+**Status:** ingestion slice implemented in KEY-11 and under review; online retrieval, citations, and
+answer generation remain pending.
 
 Consume M9 outbox events asynchronously. Extract supported documents, record parser/version/checksum, chunk content, generate embeddings, and index them with workspace/team/resource ACL metadata. Retrieval must apply authorization before returning chunks; deleted files must cause index tombstones. Keep ingestion retryable and observable, and never make upload success depend on model or vector-store availability.
 
 Delivery is split into two reviewable vertical slices:
 
-- KEY-11 ingestion foundation: PostgreSQL outbox worker with leases/retries, parser and embedding adapters, parent pages, versioned chunks, delete tombstones, and an authorized status endpoint.
-- Retrieval completion: pgvector (or a separately approved vector store), authorization-filtered similarity queries, parent-page expansion, reranking, citations, and evaluation fixtures. Retrieval is not considered shipped while vectors remain in the foundation's JSONB portability format.
+- KEY-11 ingestion foundation: PostgreSQL outbox worker with leases/retries, production Docling parsing and hybrid chunking, pinned local Qwen embeddings through private TEI, parent pages, versioned chunks, delete tombstones, and an authorized status endpoint.
+- Retrieval completion: add the vector similarity index and lexical index on the existing canonical
+  `vector(1024)` chunks, authorization-filtered candidate queries, parent-page/neighbor expansion,
+  fusion, reranking, citations, and bilingual evaluation fixtures. The pgvector storage foundation is
+  implemented; retrieval is not shipped until an authorized search API and its quality/security tests
+  exist.
+- Model access boundary: the local ingestion path now calls the separately deployed,
+  OpenAI-compatible LiteLLM Gateway described in the
+  [model-gateway decision](../architecture/model-gateway-decision.md). Ingestion uses the immutable
+  `commonplan-embedding-v1` alias; future query embedding must reuse it. A new vector space requires a
+  new alias and re-ingestion rather than silent fallback. Production gateway persistence, restricted
+  virtual keys, budgets, and HA remain deployment work.
 
 ## Verification loop for every milestone
 
