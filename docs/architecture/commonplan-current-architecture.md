@@ -14,13 +14,15 @@ claiming any tool integration is complete.
 
 | Unit | Runtime responsibility |
 | --- | --- |
-| React Web App | Browser UI. Keeps the short-lived access token in memory and receives only an opaque HttpOnly BFF session cookie. |
+| React Web App | Browser UI from the separate web repository. Local development uses Vite on `localhost:5173`; production serves the static build through hosting/CDN. Keeps the short-lived access token in memory and receives an opaque HttpOnly BFF session cookie. |
 | Business API + Web BFF | One FastAPI deployable on port 8000. Owns `/auth/*` browser mediation, all protected product APIs, resource authorization, and the GitHub webhook. |
 | Auth Service | Independent FastAPI deployable on port 8001. Owns credentials, Google identity linking, access-token signing, JWKS, refresh rotation, and login throttling. |
 | Ingestion Worker | Separate worker image/process. Claims attachment outbox events with leases and retries, reads source objects, runs Docling and HybridChunker, calls the embedding runtime, and persists pages/chunks. |
 | LiteLLM Gateway | Private OpenAI-compatible service on port 4000. Authenticates the worker and maps `commonplan-embedding-v1` to the pinned physical embedding profile. |
 | LiteLLM MCP Tool Gateway | Optional Compose profile on port 4001. Separate config and credential; currently an empty registry with no upstream MCP server or application consumer. |
 | Qwen/TEI embedding runtime | Private local model service. Serves the pinned `Qwen/Qwen3-Embedding-0.6B` revision and returns normalized 1,024-dimensional vectors. |
+| PostgreSQL server | One local `db` container hosts the independently owned `zhitong` and `zhitong_auth` databases. Production may place them on separate physical servers without changing ownership. |
+| Initialization and migration jobs | One-shot `db-init`, `backend-migrate`, and `auth-migrate` jobs complete before the long-running services become healthy. |
 
 ## Storage ownership
 
@@ -32,6 +34,9 @@ claiming any tool integration is complete.
 | RSA key volume | Auth Service signing key material. The private key never crosses the identity boundary. |
 | Attachment object storage | Signed persistent local volume in development or private S3-compatible storage in deployment. Original files remain the source for re-ingestion. |
 | Model/Docling cache volumes | Persistent local caches for pinned Qwen weights and Docling assets; caches are rebuildable and are not authoritative product data. |
+
+The two PostgreSQL rows above describe logical ownership, not two local database containers. Local
+Compose uses one physical PostgreSQL server with two databases and independent Alembic histories.
 
 ## Trust and request flow
 
@@ -48,6 +53,10 @@ claiming any tool integration is complete.
    worker later claims that event, reads the authorized source object, parses/chunks it, calls the
    authenticated gateway alias, and writes ACL-scoped page and chunk rows. Upload success never waits
    for model availability.
+
+LiteLLM and TEI are deliberately separate deployables. LiteLLM authenticates and routes the stable
+alias; TEI loads the pinned Qwen weights and performs inference. Vectors return to the worker, and the
+worker's repository—not either model component—writes pgvector rows.
 
 ## External integrations
 

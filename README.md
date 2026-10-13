@@ -10,7 +10,10 @@ The server platform for CommonPlan. This repository contains the Business API an
 - Redis: disposable cache for application sessions; it is not an authentication authority
 - Attachment storage: a signed, persistent local file volume in development; private S3-compatible storage in deployment
 
-Every business route is mounted behind the shared fail-closed access-token guard. The browser receives only an opaque HTTP-only BFF session cookie; access and refresh credentials remain server-managed.
+Every business route is mounted behind the shared fail-closed access-token guard. In the current
+half-BFF topology, the browser keeps a short-lived access JWT in memory and receives an opaque
+HTTP-only BFF session cookie; the raw refresh token remains server-managed. The target BFF split will
+also remove access-token visibility from JavaScript.
 
 ## Local development
 

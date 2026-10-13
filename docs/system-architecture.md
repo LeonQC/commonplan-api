@@ -11,6 +11,10 @@ The target uses the same LiteLLM distribution for model and MCP capabilities whi
 deployables: a private model gateway and an independently governed tool gateway. The current Compose
 file includes the latter as an optional empty `mcp` profile; no tool integration is implemented yet.
 
+Local Compose has one physical PostgreSQL `db` container with two logically and migration-isolated
+databases: `zhitong` is Business-owned and `zhitong_auth` is Auth-owned. The ownership boundary does
+not depend on whether production places them on one or two database servers.
+
 ## Service and trust boundaries
 
 ```mermaid

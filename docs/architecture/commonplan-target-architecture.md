@@ -34,11 +34,11 @@ data proves that boundary is valuable.
 ### 4. Add an async foundation only when RAG ingestion needs it
 
 The target needs durable background jobs for attachments, embeddings, retries, notifications, and
-scheduled work. The diagram deliberately says **Event Bus / Job Queue (technology TBD)**. Kafka should
-not be selected merely because the reference design uses it; a managed queue or Redis-backed worker
-may be sufficient at initial load.
+scheduled work. The diagram distinguishes today's PostgreSQL outbox from a future queue. Kafka should
+not be selected merely because the reference design uses it; a managed queue or the existing leased
+outbox may be sufficient at initial load.
 
-### 5. Add RAG as two deployable responsibilities
+### 5. Add RAG with explicit application, data, and model-runtime boundaries
 
 - **Ingestion & Background Workers**: consume durable index jobs; load original objects; parse,
   normalize, chunk, embed, version, and upsert full-text/vector indexes; retry idempotently.
@@ -46,17 +46,21 @@ may be sufficient at initial load.
   rewrite and embed the query; enforce metadata ACL filters during hybrid full-text/vector search;
   fuse results with RRF, rerank and deduplicate; assemble cited context; call the model gateway; and
   return a grounded answer with source references.
-- **Private Model Gateway and runtimes**: local ingestion now calls a separately deployed,
+- **Private Model Gateway**: local ingestion now calls a separately deployed,
   OpenAI-compatible LiteLLM gateway instead of calling TEI directly. Production still needs the
   database-backed key/budget control plane and highly available deployment described below. Bifrost
   remains a gateway-neutral alternative to validate with the same conformance/load suite. The gateway
   owns provider credentials, stable model
   aliases, retries, routing, budgets and call telemetry. It does not own prompts, ACL decisions,
-  retrieval or citations. Workers and online retrieval use the same pinned
+  retrieval, citations, or model weights. Workers and online retrieval use the same pinned
   `commonplan-embedding-v1` alias, backed only by the exact Qwen revision and 1024-dimensional profile;
   it may never silently fall back to a different embedding model. Generation is a separate alias and
   is called only after authorization-filtered context has been assembled. See the
   [model gateway decision](model-gateway-decision.md).
+- **Independent model runtimes**: the embedding runtime is the implemented Qwen/TEI deployable.
+  Future reranker and generation runtimes are separate workloads with independent capacity, health,
+  and release lifecycles. They sit behind distinct aliases and may use TEI, vLLM, a local runtime, or
+  an approved provider as appropriate; LiteLLM routes to them but does not execute their models.
 - **MCP Tool Gateway**: use LiteLLM's MCP capability as a second logical and deployable gateway, not
   as an extra route inside the model-credential boundary. Agent/AI services use it to discover and
   invoke reviewed MCP tools, resources and prompts. Every upstream server needs explicit OAuth or
@@ -67,6 +71,10 @@ may be sufficient at initial load.
 The initial vector index can use `pgvector` alongside product metadata in Business PostgreSQL. Original
 attachments and parsing artifacts belong in object storage. A separate vector database should be
 introduced only after measured scale or retrieval requirements justify it.
+
+The **Retrieval Corpus** in the visual is a data boundary—object storage, PostgreSQL full-text data,
+ACL metadata, and pgvector chunks—not an independently deployed microservice. Ingestion Worker writes
+it through repositories and AI/RAG Service reads it with mandatory authorization predicates.
 
 Current delivery status is narrower than this target: object storage, parent pages, ACL-scoped chunks,
 canonical pgvector embeddings, and the local LiteLLM-to-TEI embedding path are implemented.
