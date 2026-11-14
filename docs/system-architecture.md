@@ -79,7 +79,9 @@ flowchart LR
     domain --> appdb
     domain --> redis
     domain --> objectstore
-    appdb -->|Claim file.ready outbox event| worker
+    appdb -->|Committed append-only outbox + WAL| debezium[Debezium CDC]
+    debezium --> redpanda[Redpanda / Kafka protocol]
+    redpanda -->|Knowledge consumer group| worker
     worker -->|Read source bytes| objectstore
     worker --> docling
     docling -->|Authenticated stable alias| gateway
@@ -105,7 +107,8 @@ email. Email is a mutable display/contact attribute, not the security identifier
 | Business database | encrypted refresh-token vault, application sessions and future domain entities | BFF credential custody and durable product state |
 | Redis | cached application-session payloads | Disposable acceleration only |
 | Attachment object storage | original private issue/project files | Authoritative bytes for download and re-ingestion |
-| Business database | outbox events, ingestion status, parent pages, ACL-scoped chunks, `vector(1024)` embeddings | Durable offline-ingestion state and future retrieval corpus |
+| Business database | append-only outbox, ingestion status, parsed pages, canonical knowledge sources/nodes, embedding profiles and pgvector representations | Durable offline-ingestion state and future retrieval corpus |
+| Redpanda | knowledge events, consumer offsets, replay log and DLQ | Durable transport; business rows remain authoritative |
 | Model/Docling cache volumes | pinned Qwen weights, tokenizer and parser assets | Rebuildable local runtime cache; not product authority |
 | Browser memory | short-lived access JWT | Bearer authentication to Business API |
 | Browser HTTP-only cookie | opaque rotating BFF session id | Select a server-side refresh credential without exposing it |
@@ -118,22 +121,25 @@ does not retain password hashes, provider subjects, or refresh-token ledger rows
 
 ```mermaid
 flowchart LR
-    complete[Authorized upload completion] -->|one transaction| durable[(file_assets + file.ready outbox)]
-    durable -->|claim with lease| worker[Ingestion worker]
-    worker -->|verify SHA-256 and read| objects[(Private object storage)]
-    worker --> parse[Docling or canonical-text parser]
+    mutation[File or database entity mutation] -->|one transaction| durable[(business row + append-only outbox)]
+    durable -->|PostgreSQL WAL| debezium[Debezium CDC]
+    debezium --> broker[Redpanda knowledge topic]
+    broker -->|consumer group| worker[Knowledge worker]
+    worker -->|attachment: verify SHA-256 and read| objects[(Private object storage)]
+    worker --> parse[Docling or database Markdown renderer]
     parse --> chunk[Qwen-tokenized HybridChunker]
     chunk -->|authenticated commonplan-embedding-v1| gateway[Private LiteLLM Gateway]
     gateway -->|pinned physical model and revision| tei[Private Qwen / TEI]
-    tei --> persist[(document_pages + document_chunks vector(1024))]
-    worker -->|ready / failed / deleted| status[(document_ingestions + outbox state)]
+    tei --> persist[(document_pages + knowledge_nodes + knowledge_embeddings)]
+    worker -->|ready / failed / deleted| status[(document_ingestions + knowledge_sources)]
 ```
 
 This path is asynchronous and retryable: upload availability does not depend on Docling or the model
 runtime. The worker is a separate process but still obeys the repository-only database boundary.
-Chunks denormalize workspace/team and exactly one issue/project scope so a future retrieval query can
+Knowledge nodes denormalize workspace/team and at least one issue/project scope. An Issue-derived node
+may also carry its parent Project, so a future retrieval query can
 apply authorization in the same database statement. The current implementation stops here—there is
-no similarity-search API, query embedder, reranker, citation assembler, or generation model yet. The
+no HNSW/lexical index, similarity-search API, query embedder, reranker, citation assembler, or generation model yet. The
 gateway currently provides the embedding alias and authenticated routing only.
 
 ## Future model and tool gateway flow

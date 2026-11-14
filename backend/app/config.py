@@ -40,9 +40,17 @@ class Settings(BaseSettings):
     attachment_upload_max_bytes: int = 25 * 1024 * 1024
     attachment_url_ttl_seconds: int = 15 * 60
     ingestion_worker_id: str = "ingestion-worker-1"
-    ingestion_poll_seconds: float = 1.0
-    ingestion_lease_seconds: int = 10 * 60
     ingestion_max_attempts: int = 5
+    event_bus_bootstrap_servers: str = "redpanda:9092"
+    event_bus_topic: str = "commonplan.knowledge.v1"
+    event_bus_dlq_topic: str = "commonplan.knowledge.dlq.v1"
+    event_bus_consumer_group: str = "commonplan-knowledge-indexer-v1"
+    event_bus_poll_timeout_seconds: float = 1.0
+    event_bus_max_poll_interval_seconds: int = 30 * 60
+    event_bus_security_protocol: str = "PLAINTEXT"
+    event_bus_sasl_mechanism: str = "SCRAM-SHA-256"
+    event_bus_sasl_username: str = ""
+    event_bus_sasl_password: str = ""
     ingestion_allow_unscanned: bool = True
     ingestion_chunk_tokens: int = 300
     ingestion_chunk_overlap_tokens: int = 50
@@ -65,10 +73,8 @@ class Settings(BaseSettings):
     def validate_cookie_settings(self) -> "Settings":
         if self.cookie_same_site == "none" and not self.cookie_secure:
             raise ValueError("SameSite=None cookies require COOKIE_SECURE=true")
-        if self.ingestion_embedding_dimensions != 1024:
-            raise ValueError(
-                "INGESTION_EMBEDDING_DIMENSIONS must match the canonical vector(1024) schema"
-            )
+        if self.ingestion_embedding_dimensions < 1:
+            raise ValueError("INGESTION_EMBEDDING_DIMENSIONS must be positive")
         return self
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", env_ignore_empty=True)
