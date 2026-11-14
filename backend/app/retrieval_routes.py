@@ -1,7 +1,12 @@
 from fastapi import APIRouter, HTTPException, status
 
 from app.auth import CurrentUser
-from app.schemas import RetrievalSearchRequest, RetrievalSearchResponse
+from app.schemas import (
+    HybridRetrievalSearchRequest,
+    HybridRetrievalSearchResponse,
+    RetrievalSearchRequest,
+    RetrievalSearchResponse,
+)
 from app.services.retrieval_service import (
     RetrievalForbidden,
     RetrievalNotFound,
@@ -33,6 +38,33 @@ def search_knowledge(
             project_id=payload.project_id,
             issue_id=payload.issue_id,
             limit=payload.limit,
+        )
+    except RetrievalNotFound as exc:
+        raise HTTPException(status_code=404, detail="Retrieval scope not found") from exc
+    except RetrievalForbidden as exc:
+        raise HTTPException(status_code=403, detail="Insufficient retrieval access") from exc
+    except RetrievalUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Retrieval model is unavailable",
+        ) from exc
+
+
+@router.post(
+    "/workspaces/{workspace_id}/retrieval/hybrid-search",
+    response_model=HybridRetrievalSearchResponse,
+)
+def hybrid_search_knowledge(
+    workspace_id: str,
+    payload: HybridRetrievalSearchRequest,
+    current_user: CurrentUser,
+    service: RetrievalServiceDep,
+):
+    try:
+        return service.hybrid_search(
+            current_user,
+            workspace_id,
+            **payload.model_dump(),
         )
     except RetrievalNotFound as exc:
         raise HTTPException(status_code=404, detail="Retrieval scope not found") from exc

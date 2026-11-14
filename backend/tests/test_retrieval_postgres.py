@@ -217,6 +217,22 @@ def test_postgres_search_rejects_other_teams_and_embedding_spaces():
                 content="TA-12 was delayed by an ONNX runtime failure",
                 vector=authorized_vector,
             )
+            db.add(KnowledgeNode(
+                id="authorized-neighbor",
+                knowledge_source_id="source-retrieval-project",
+                workspace_id="retrieval-workspace",
+                team_id="retrieval-team",
+                project_id="retrieval-project",
+                node_key="chunk:1",
+                node_kind="chunk",
+                modality="text",
+                indexable=True,
+                ordinal=1,
+                content="The next chunk records the remediation and rollout plan",
+                content_hash="hash-authorized-neighbor",
+                token_count=9,
+                node_metadata={},
+            ))
             # This is a better vector/lexical match but belongs to a team outside
             # the caller scope and must never leak into either result set.
             _add_source(
@@ -249,10 +265,17 @@ def test_postgres_search_rejects_other_teams_and_embedding_spaces():
                 query_vector, canonical_profile.profile_key, scope, 5,
             )
             lexical_hits = repository.lexical_search("TA-12 ONNX", scope, 5)
+            contexts = repository.expand_context(
+                ["authorized-node", "forbidden-node"], scope, 1, True,
+            )
 
             assert [hit.node_id for hit in vector_hits] == ["authorized-node"]
             assert [hit.node_id for hit in lexical_hits] == ["authorized-node"]
             assert vector_hits[0].citation_target == "project:retrieval-project"
+            assert [row.passage_id for row in contexts["authorized-node"]] == [
+                "authorized-neighbor"
+            ]
+            assert "forbidden-node" not in contexts
             assert db.execute(text(
                 "SELECT current_setting('hnsw.iterative_scan')"
             )).scalar_one() == "strict_order"

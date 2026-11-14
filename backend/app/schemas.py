@@ -694,3 +694,66 @@ class RetrievalSearchResponse(BaseModel):
     embedding_profile_key: str | None
     vector_results: list[RetrievalHitRead]
     lexical_results: list[RetrievalHitRead]
+
+
+class HybridRetrievalSearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=1000)
+    team_ids: list[str] | None = Field(default=None, max_length=50)
+    project_id: str | None = None
+    issue_id: str | None = None
+    limit: int = Field(default=10, ge=1, le=30)
+    candidate_limit: int = Field(default=40, ge=10, le=100)
+    neighbor_window: int = Field(default=1, ge=0, le=3)
+    include_parent: bool = True
+
+
+class RetrievalContextRead(BaseModel):
+    passage_id: str
+    relation: Literal["parent_page", "previous", "next"]
+    content: str
+    ordinal: int | None
+    heading_path: str | None
+    page_from: int | None
+    page_to: int | None
+
+
+class HybridRetrievalHitRead(BaseModel):
+    node_id: str
+    source_id: str
+    source_type: str
+    content: str
+    workspace_id: str
+    team_id: str
+    project_id: str | None
+    issue_id: str | None
+    heading_path: str | None
+    page_from: int | None
+    page_to: int | None
+    metadata: dict
+    citation_target: str
+    rrf_score: float
+    rerank_score: float
+    final_score: float
+    vector_rank: int | None
+    lexical_rank: int | None
+    vector_score: float | None
+    lexical_score: float | None
+    context: list[RetrievalContextRead]
+
+
+class RetrievalPipelineRead(BaseModel):
+    fusion: str
+    reranker: str
+    candidate_limit: int
+    neighbor_window: int
+    include_parent: bool
+    timings_ms: dict[str, float]
+
+
+class HybridRetrievalSearchResponse(BaseModel):
+    scope: RetrievalScopeRead
+    embedding_profile_key: str | None
+    vector_results: list[RetrievalHitRead]
+    lexical_results: list[RetrievalHitRead]
+    fused_results: list[HybridRetrievalHitRead]
+    pipeline: RetrievalPipelineRead
