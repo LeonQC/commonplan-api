@@ -179,6 +179,9 @@ class IngestionRepository:
         self.db.flush()
         ingestion.status = "embedding"
         source.status = "embedding"
+        profile = self.db.get(EmbeddingProfile, ingestion.embedding_profile_id)
+        if profile is None:
+            raise ValueError("Embedding profile disappeared while processing")
         for chunk, embedding in zip(chunks, embeddings, strict=True):
             node_id = str(uuid.uuid4())
             content_hash = sha256(chunk.content.encode()).hexdigest()
@@ -207,6 +210,7 @@ class IngestionRepository:
             self.db.add(KnowledgeEmbedding(
                 knowledge_node_id=node_id,
                 embedding_profile_id=ingestion.embedding_profile_id,
+                embedding_profile_key=profile.profile_key,
                 content_hash=content_hash,
                 embedding=embedding,
             ))

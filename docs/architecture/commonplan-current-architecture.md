@@ -6,8 +6,9 @@ This is the code-backed current-state architecture after the KEY-11 ingestion fo
 intentionally different from the target design: CommonPlan now has local/S3-compatible attachment
 storage, a transactional outbox captured from PostgreSQL WAL by Debezium, a Kafka-compatible
 Redpanda event backbone, database and document knowledge ingestion, Docling parsing, a private
-LiteLLM Gateway backed by Qwen/TEI, and canonical pgvector rows. It still has no online
-retrieval/answer service, reranker, citation assembler, generation model, or registered MCP tool. An optional empty
+LiteLLM Gateway backed by Qwen/TEI, canonical pgvector rows, and an authenticated R1 endpoint that
+returns ACL-filtered vector and lexical candidates. It still has no hybrid fusion/answer service,
+reranker, citation assembler, generation model, Agentic RAG workflow, or registered MCP tool. An optional empty
 LiteLLM MCP gateway profile now makes the future tool boundary independently deployable without
 claiming any tool integration is complete.
 
@@ -77,8 +78,9 @@ worker's repository—not either model component—writes pgvector rows.
 ## Implemented knowledge-ingestion boundary and remaining RAG seam
 
 The offline ingestion foundation includes attachments and high-context database records, but it deliberately stops before search. There is no
-HNSW/lexical index, search endpoint, query embedding path, ACL-filtered candidate retrieval, reranker,
-citation assembler, or answer-generation model. LiteLLM is implemented locally for the embedding
+R1 now includes HNSW/full-text/trigram indexes, same-profile query embedding, and an ACL-filtered
+candidate search endpoint. It does not yet include RRF fusion, context expansion, reranking,
+citation assembly, or an answer-generation model. LiteLLM is implemented locally for the embedding
 path; production gateway PostgreSQL/virtual keys, budgets, and multi-replica governance remain a
 deployment follow-up. Any future diagram must continue to distinguish implemented ingestion from
 proposed online retrieval and generation.

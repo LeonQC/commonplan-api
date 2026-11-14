@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -651,3 +652,45 @@ class TeamSummaryRead(BaseModel):
     attention_issues: dict[str, list[dict]]
     recent_activity: list[dict]
     matching_issues: list[dict]
+
+
+class RetrievalSearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=1000)
+    mode: Literal["vector", "lexical", "both"] = "both"
+    team_ids: list[str] | None = Field(default=None, max_length=50)
+    project_id: str | None = None
+    issue_id: str | None = None
+    limit: int = Field(default=10, ge=1, le=50)
+
+
+class RetrievalHitRead(BaseModel):
+    node_id: str
+    source_id: str
+    source_type: str
+    content: str
+    method: Literal["vector", "lexical"]
+    score: float
+    workspace_id: str
+    team_id: str
+    project_id: str | None
+    issue_id: str | None
+    heading_path: str | None
+    page_from: int | None
+    page_to: int | None
+    metadata: dict
+    citation_target: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RetrievalScopeRead(BaseModel):
+    workspace_id: str
+    team_ids: list[str]
+    project_id: str | None
+    issue_id: str | None
+
+
+class RetrievalSearchResponse(BaseModel):
+    scope: RetrievalScopeRead
+    embedding_profile_key: str | None
+    vector_results: list[RetrievalHitRead]
+    lexical_results: list[RetrievalHitRead]

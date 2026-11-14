@@ -151,6 +151,13 @@ services:
       OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:-commonplan-local-secret}
       ATTACHMENT_UPLOAD_MAX_BYTES: ${ATTACHMENT_UPLOAD_MAX_BYTES:-26214400}
       ATTACHMENT_URL_TTL_SECONDS: ${ATTACHMENT_URL_TTL_SECONDS:-900}
+      INGESTION_EMBEDDING_PROVIDER: ${INGESTION_EMBEDDING_PROVIDER:-model_gateway}
+      INGESTION_EMBEDDING_MODEL: ${INGESTION_EMBEDDING_MODEL:-Qwen/Qwen3-Embedding-0.6B}
+      INGESTION_EMBEDDING_MODEL_REVISION: ${INGESTION_EMBEDDING_MODEL_REVISION:-97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3}
+      INGESTION_EMBEDDING_DIMENSIONS: ${INGESTION_EMBEDDING_DIMENSIONS:-1024}
+      MODEL_GATEWAY_BASE_URL: ${MODEL_GATEWAY_BASE_URL:-http://model-gateway:4000/v1}
+      MODEL_GATEWAY_API_KEY: ${MODEL_GATEWAY_API_KEY:-sk-local-commonplan-change-me}
+      MODEL_GATEWAY_EMBEDDING_ALIAS: ${MODEL_GATEWAY_EMBEDDING_ALIAS:-commonplan-embedding-v1}
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     ports:
       - "8000:8000"
@@ -163,6 +170,8 @@ services:
       backend-migrate:
         condition: service_completed_successfully
       auth-service:
+        condition: service_healthy
+      model-gateway:
         condition: service_healthy
 
   ingestion-worker:

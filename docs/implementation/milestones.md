@@ -255,19 +255,20 @@ discovery or execution.
 
 ## M12 — RAG ingestion and retrieval
 
-**Status:** ingestion slice implemented in KEY-11 and under review; online retrieval, citations, and
-answer generation remain pending.
+**Status:** ingestion slice implemented in KEY-11. KEY-20 R1 deterministic retrieval is implemented
+with ACL-filtered vector/lexical candidate search; fusion, reranking, citations, answer generation,
+and Agentic RAG remain pending.
 
 Consume durable knowledge events asynchronously. Index both uploaded documents and contextual product records—issues, comments, projects, project objectives, milestones, and project updates—with workspace/team/resource ACL metadata. Extract supported documents, render database records deterministically, record parser/renderer/version/checksum, chunk content, generate embeddings, and store tombstones for deleted sources. Retrieval must apply authorization before returning chunks. Ingestion stays retryable and observable, and neither an upload nor a business mutation depends on model or vector-store availability.
 
 Delivery is split into two reviewable vertical slices:
 
 - KEY-11 ingestion foundation: business mutations append versioned knowledge events in the same PostgreSQL transaction; Debezium captures the append-only outbox from WAL and publishes to Redpanda through the Kafka protocol. A consumer-group worker handles retries and a dead-letter topic, then routes attachments through production Docling/hybrid chunking and database records through deterministic Markdown rendering/overlapping chunks. Both paths use the pinned local Qwen embedding alias through the private model gateway and persist ACL-scoped, versioned chunks plus delete tombstones. Consumer offsets—not mutable outbox rows—own delivery progress.
-- Retrieval completion: add profile-specific vector similarity indexes and a lexical index over the
-  canonical knowledge nodes/embeddings, authorization-filtered candidate queries, parent-page/neighbor expansion,
-  fusion, reranking, citations, and bilingual evaluation fixtures. The pgvector storage foundation is
-  implemented; retrieval is not shipped until an authorized search API and its quality/security tests
-  exist.
+- Retrieval completion: R1 adds a 1,024-dimensional HNSW expression index, full-text/trigram lexical
+  indexes, same-profile query embedding, authorization-filtered candidate queries, and separate
+  rankings for inspection. R2 adds parent-page/neighbor expansion, RRF fusion, reranking and a
+  bilingual quality dataset. R3 adds grounded answers and citations; R4 adds bounded LangGraph
+  planning/rewrite/grade loops.
 - Model access boundary: the local ingestion path now calls the separately deployed,
   OpenAI-compatible LiteLLM Gateway described in the
   [model-gateway decision](../architecture/model-gateway-decision.md). Ingestion uses the immutable
