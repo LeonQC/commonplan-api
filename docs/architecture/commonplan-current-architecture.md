@@ -6,8 +6,10 @@ This is the code-backed current-state architecture after the KEY-11 ingestion fo
 intentionally different from the target design: CommonPlan now has local/S3-compatible attachment
 storage, a transactional outbox captured from PostgreSQL WAL by Debezium, a Kafka-compatible
 Redpanda event backbone, database and document knowledge ingestion, Docling parsing, a private
-LiteLLM Gateway backed by Qwen/TEI, and canonical pgvector rows. It still has no online
-retrieval/answer service, reranker, citation assembler, generation model, or registered MCP tool. An optional empty
+LiteLLM Gateway backed by Qwen/TEI, canonical pgvector rows, and authenticated retrieval endpoints.
+R1 returns ACL-filtered vector and lexical candidates; stacked R2 adds RRF, authorized context
+expansion, explainable local reranking, and a Web Retrieval Lab. It still has no neural reranker,
+citation assembler, generation model, Agentic RAG workflow, or registered MCP tool. An optional empty
 LiteLLM MCP gateway profile now makes the future tool boundary independently deployable without
 claiming any tool integration is complete.
 
@@ -77,8 +79,9 @@ worker's repository—not either model component—writes pgvector rows.
 ## Implemented knowledge-ingestion boundary and remaining RAG seam
 
 The offline ingestion foundation includes attachments and high-context database records, but it deliberately stops before search. There is no
-HNSW/lexical index, search endpoint, query embedding path, ACL-filtered candidate retrieval, reranker,
-citation assembler, or answer-generation model. LiteLLM is implemented locally for the embedding
+R1 includes HNSW/full-text/trigram indexes, same-profile query embedding, and an ACL-filtered
+candidate search endpoint. R2 adds RRF fusion, parent/neighbor expansion, and deterministic local
+reranking. It does not yet include a neural reranker, citation assembly, or an answer-generation model. LiteLLM is implemented locally for the embedding
 path; production gateway PostgreSQL/virtual keys, budgets, and multi-replica governance remain a
 deployment follow-up. Any future diagram must continue to distinguish implemented ingestion from
 proposed online retrieval and generation.

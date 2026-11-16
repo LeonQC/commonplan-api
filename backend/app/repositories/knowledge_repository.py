@@ -265,6 +265,7 @@ class KnowledgeRepository:
             ))
             self.db.add(KnowledgeEmbedding(
                 knowledge_node_id=node_id, embedding_profile_id=profile.id,
+                embedding_profile_key=profile.profile_key,
                 content_hash=chunk_hash, embedding=embedding,
             ))
         source.status = "ready"
