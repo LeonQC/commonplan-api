@@ -3,6 +3,7 @@ from typing import Literal
 
 
 RetrievalMethod = Literal["vector", "lexical"]
+ContextRelation = Literal["parent_page", "previous", "next"]
 
 
 @dataclass(frozen=True)
@@ -37,3 +38,27 @@ class SearchHit:
         if self.project_id:
             return f"project:{self.project_id}"
         return f"{self.source_type}:{self.source_id}"
+
+
+@dataclass(frozen=True)
+class ContextPassage:
+    passage_id: str
+    relation: ContextRelation
+    content: str
+    ordinal: int | None = None
+    heading_path: str | None = None
+    page_from: int | None = None
+    page_to: int | None = None
+
+
+@dataclass(frozen=True)
+class FusedHit:
+    hit: SearchHit
+    rrf_score: float
+    rerank_score: float
+    final_score: float
+    vector_rank: int | None = None
+    lexical_rank: int | None = None
+    vector_score: float | None = None
+    lexical_score: float | None = None
+    context: tuple[ContextPassage, ...] = ()

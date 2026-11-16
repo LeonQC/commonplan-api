@@ -7,8 +7,8 @@ from sqlalchemy.dialects import postgresql
 from app.main import app
 from app.models import User
 from app.repositories.retrieval_repository import SqlAlchemyRetrievalRepository
-from app.retrieval.types import RetrievalScope, SearchHit
-from app.schemas import RetrievalSearchResponse
+from app.retrieval.types import ContextPassage, RetrievalScope, SearchHit
+from app.schemas import HybridRetrievalSearchResponse, RetrievalSearchResponse
 from app.services.retrieval_service import RetrievalForbidden, RetrievalService
 
 
@@ -45,6 +45,7 @@ class FakeRepository:
     def __init__(self):
         self.vector_calls = []
         self.lexical_calls = []
+        self.context_calls = []
 
     def vector_search(self, vector, profile_key, scope, limit):
         self.vector_calls.append((vector, profile_key, scope, limit))
@@ -53,6 +54,16 @@ class FakeRepository:
     def lexical_search(self, query, scope, limit):
         self.lexical_calls.append((query, scope, limit))
         return [hit("lexical", scope)]
+
+    def expand_context(self, node_ids, scope, neighbor_window, include_parent):
+        self.context_calls.append((node_ids, scope, neighbor_window, include_parent))
+        return {
+            node_id: [ContextPassage(
+                passage_id=f"context-{node_id}", relation="next",
+                content="TA-1 failed after the ONNX runtime upgrade", ordinal=2,
+            )]
+            for node_id in node_ids
+        }
 
 
 def hit(method, scope):
@@ -152,6 +163,31 @@ def test_requested_team_must_be_authorized_before_repository_call():
     assert repository.lexical_calls == []
 
 
+def test_hybrid_search_fuses_channels_and_expands_context():
+    repository = FakeRepository()
+    service = RetrievalService(
+        repository, FakeWorkspaces(["team-a"]), FakeEmbeddingProvider(),
+    )
+
+    result = service.hybrid_search(
+        user(), "workspace-1", query="TA-1 ONNX failure",
+        team_ids=None, project_id=None, issue_id=None, limit=5,
+        candidate_limit=20, neighbor_window=1, include_parent=True,
+    )
+
+    assert len(result["vector_results"]) == 1
+    assert len(result["lexical_results"]) == 1
+    assert len(result["fused_results"]) == 2
+    assert result["fused_results"][0]["context"][0]["relation"] == "next"
+    assert result["pipeline"]["fusion"] == "rrf-k60"
+    assert result["pipeline"]["reranker"] == "deterministic-coverage-v1"
+    serialized = HybridRetrievalSearchResponse.model_validate(result).model_dump()
+    assert serialized["fused_results"][0]["citation_target"] == "issue:issue-1"
+    assert repository.vector_calls[0][3] == 20
+    assert repository.lexical_calls[0][2] == 20
+    assert repository.context_calls[0][2:] == (1, True)
+
+
 class EmptyRows:
     def all(self):
         return []
@@ -212,6 +248,16 @@ def test_retrieval_route_is_fail_closed_without_access_token():
     response = TestClient(app).post(
         "/api/v1/workspaces/workspace-1/retrieval/search",
         json={"query": "TA-1", "mode": "lexical"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Authentication required"
+
+
+def test_hybrid_retrieval_route_is_fail_closed_without_access_token():
+    response = TestClient(app).post(
+        "/api/v1/workspaces/workspace-1/retrieval/hybrid-search",
+        json={"query": "TA-1"},
     )
 
     assert response.status_code == 401
