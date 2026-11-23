@@ -1,0 +1,14 @@
+[
+  {
+    "id": "en-auth-callback",
+    "language": "en",
+    "query": "Why did the Google login callback fail?",
+    "relevant_node_ids": ["fixture-auth-callback", "fixture-auth-remediation"]
+  },
+  {
+    "id": "zh-auth-callback",
+    "language": "zh",
+    "query": "Google 登录回调失败的原因是什么？",
+    "relevant_node_ids": ["fixture-auth-callback", "fixture-auth-remediation"]
+  }
+]

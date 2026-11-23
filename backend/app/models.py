@@ -677,6 +677,9 @@ class KnowledgeEmbedding(Base):
     embedding_profile_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("embedding_profiles.id"), primary_key=True, index=True
     )
+    embedding_profile_key: Mapped[str] = mapped_column(
+        String(240), ForeignKey("embedding_profiles.profile_key"), index=True
+    )
     content_hash: Mapped[str] = mapped_column(String(64))
     embedding: Mapped[list[float]] = mapped_column(VECTOR(), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

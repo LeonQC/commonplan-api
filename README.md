@@ -74,4 +74,6 @@ the staged implementation plan is in [`docs/implementation/milestones.md`](docs/
 The AI boundary and LiteLLM/Bifrost decision are documented separately in the
 [model-gateway decision](docs/architecture/model-gateway-decision.md). The local embedding path is
 implemented through LiteLLM; production virtual keys, gateway persistence, generation, reranking, and
-online retrieval and its vector/lexical indexes remain later delivery work.
+R1 online retrieval exposes authorization-scoped vector and lexical candidate rankings. Stacked R2
+adds RRF fusion, parent/neighbor expansion, explainable local reranking, and a Retrieval Lab in the
+Web repository. Neural reranking, citations, answer generation, and Agentic RAG remain later work.

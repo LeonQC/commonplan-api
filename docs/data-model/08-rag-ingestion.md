@@ -34,7 +34,7 @@ idempotent. A failing delivery receives bounded exponential retries and is then 
 | `knowledge_sources` | Canonical identity, version, lifecycle, content hash and ACL scope for attachments and database records |
 | `knowledge_nodes` | Versioned text/image/audio/table nodes with parent-child structure, provenance, modality and denormalized ACL scope |
 | `embedding_profiles` | Stable vector-space contract: provider, physical model/revision, dimensions, metric and normalization policy |
-| `knowledge_embeddings` | A node/profile pair and its variable-dimension pgvector value; no similarity index in this phase |
+| `knowledge_embeddings` | A node/profile pair and its variable-dimension pgvector value; KEY-20 adds a profile-specific HNSW index for canonical Qwen v1 |
 
 Comments are ingested independently from their Issue, and Project Updates independently from their
 Project. This avoids re-embedding an entire aggregate for one small edit. Parent scope is retained in
@@ -105,10 +105,12 @@ define compatibility. A new profile can be populated beside the active profile a
 after re-embedding is complete. Source objects, parsed pages and authorization metadata remain
 authoritative.
 
-This phase intentionally creates no HNSW/IVFFlat index, lexical-search index or similarity-search
-API. The B-tree indexes present here support foreign keys, ingestion ownership and operational
-inspection only. Authorization-filtered candidate selection, index/operator-class choice, parent or
-neighbor expansion, fusion, reranking and citations belong to the separately reviewed retrieval phase.
+The ingestion slice intentionally created no retrieval indexes. KEY-20 R1 now adds a
+1,024-dimensional cosine HNSW expression index, full-text/trigram lexical indexes, query embedding,
+and an authorization-filtered candidate API over this same corpus. It returns vector and lexical
+rankings separately. Parent/neighbor expansion, fusion, reranking, citations and generation remain
+later retrieval phases. See
+[`../implementation/retrieval-r1-verification.md`](../implementation/retrieval-r1-verification.md).
 
 ## API and operation
 
